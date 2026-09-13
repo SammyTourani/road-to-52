@@ -1,0 +1,56 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# SFT for the nano model on smol-smoltalk, assistant-only loss.
+#   python scripts/prepare_sft_data.py --n 200000 --max-seq 1024
+#   python -m r52.posttrain.sft configs/posttrain/sft_nano.yaml --init-from runs/m1/ckpt/best
+#
+# docs/PLAN.md §3.1 item 5: SFT -> RL ordering is worth ~5 points over either alone
+# (Magistral 65.4 / 65.8 / 70.7), so this stage is the input to r52.posttrain.rl, not the end.
+name: sft_nano
+init_from: runs/m1/ckpt/best      # the midtrained checkpoint; override with --init-from
+data_dir: data/sft/smol-smoltalk
+
+max_seq: 1024
+micro_batch: 2                    # 2 x 1024 = 2,048 tokens per fwd/bwd
+grad_accum: 8                     # -> 16,384 padded tokens per optimizer step
+epochs: 2.0
+pack: false                       # pad+mask: exact per-conversation attention (see data.py)
+pad_multiple: 64
+shuffle_seed: 1337
+val_batches: 16
+
+train:
+  # Pretraining LRs / 10. At nano scale SFT is a small correction to a converged model;
+  # modded-nanogpt's 0.05 Muon LR would destroy it inside ten steps.
+  muon_lr: 0.003536             # nano_30m 0.03536 / 10
+  muon_momentum: 0.95
+  muon_nesterov: true
+  muon_ns_steps: 5
+  adam_lr_embed: 0.042426        # 0.42426 / 10
+  adam_lr_vembed: 0.042426
+  adam_lr_head: 0.0005657        # 0.005657 / 10
+  adam_lr_scalar: 0.0028284      # 0.028284 / 10
+  adam_betas_embed: [0.8, 0.95]
+  adam_betas_vembed: [0.75, 0.95]
+  adam_betas_head: [0.5, 0.95]
+  adam_betas_scalar: [0.9, 0.99]
+  adam_eps: 1.0e-10
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  adam_wd_scalar: 0.0
+
+  warmup_steps: 50
+  cooldown_frac: 1.0             # decay from the end of warmup all the way to zero
+  final_lr_frac: 0.0
+  grad_clip: 1.0
+
+  log_interval: 20
+  val_interval: 100
+  ckpt_interval: 250
+  keep_last: 1
+  out_dir: runs
+  memory_limit_gb: 6.0
+  cache_limit_gb: 1.0
+  seed: 1337
+  compile: false                 # batch shapes vary with padding; compile would re-trace

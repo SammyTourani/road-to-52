@@ -29,6 +29,12 @@ EOT = 50256
 """GPT-2's ``<|endoftext|>`` id."""
 N_VOCAB = 50257
 PADDED_VOCAB = 50304
+N_SPARE_IDS = PADDED_VOCAB - N_VOCAB
+"""Ids 50257..50303 are addressable by the model but never emitted by GPT-2's BPE.
+
+:mod:`r52.chat_template` claims the first eight for the chat special tokens, which is why
+post-training needs no vocabulary surgery and no embedding resize.
+"""
 
 
 class GPT2Tokenizer:
@@ -46,13 +52,51 @@ class GPT2Tokenizer:
         """Text -> token ids."""
         return self.enc.encode(text, allowed_special=allowed_special)
 
+    def encode_ordinary(self, text: str) -> list[int]:
+        """Text -> token ids with **no** special token ever produced.
+
+        Used for chat message bodies: a user who literally types ``<|endoftext|>`` must get
+        the BPE spelling of that string, not id 50256, or they could forge turn boundaries.
+        See :mod:`r52.chat_template`.
+        """
+        return self.enc.encode_ordinary(text)
+
     def decode(self, tokens) -> str:
-        """Token ids -> text (invalid UTF-8 is replaced, never raised)."""
-        return self.enc.decode([int(t) for t in tokens])
+        """Token ids -> text (invalid UTF-8 is replaced, never raised).
+
+        Chat special ids (:mod:`r52.chat_template`, 50257..) decode to their literal
+        spelling rather than raising, so a midtrained or SFT'd corpus can be inspected and
+        byte-counted with the same call as raw FineWeb.
+        """
+        return self.decode_bytes(tokens).decode("utf-8", errors="replace")
 
     def decode_bytes(self, tokens) -> bytes:
-        """Token ids -> raw UTF-8 bytes (exact; used for byte counting)."""
-        return self.enc.decode_bytes([int(t) for t in tokens])
+        """Token ids -> raw UTF-8 bytes (exact; used for byte counting).
+
+        tiktoken raises ``KeyError: Invalid token for decoding`` on any id >= 50257, which
+        every chat-rendered corpus contains, so ids outside GPT-2's vocabulary are emitted
+        as their UTF-8 spelling (``<|bos|>``, ...) and unknown spare ids as ``<|id|>``.
+        """
+        from .chat_template import SPECIAL_TOKENS
+
+        ids = [int(t) for t in tokens]
+        if all(i < N_VOCAB for i in ids):
+            return self.enc.decode_bytes(ids)
+        out = bytearray()
+        run: list[int] = []
+        for i in ids:
+            if i < N_VOCAB:
+                run.append(i)
+                continue
+            if run:
+                out += self.enc.decode_bytes(run)
+                run = []
+            j = i - N_VOCAB
+            name = SPECIAL_TOKENS[j] if j < len(SPECIAL_TOKENS) else f"<|{i}|>"
+            out += name.encode("utf-8")
+        if run:
+            out += self.enc.decode_bytes(run)
+        return bytes(out)
 
     def n_bytes(self, tokens) -> int:
         """UTF-8 byte length of the text that ``tokens`` decode to."""

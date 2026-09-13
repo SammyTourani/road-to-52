@@ -42,6 +42,7 @@ from typing import Any
 import mlx.core as mx
 from mlx.utils import tree_flatten
 
+from . import chat_template
 from .checkpoint import checkpoint_config
 from .config import Config, ModelConfig
 from .model import GPT
@@ -79,6 +80,11 @@ def model_config_to_mlx_lm(cfg: Config) -> dict[str, Any]:
         "intermediate_size": m.mlp_hidden,
         "rope_theta": m.rope_base,
         "tie_word_embeddings": False,
+        # mlx-lm reads `eos_token_id` from config.json and hands it to the tokenizer wrapper,
+        # so generation stops on the chat EOS as well as GPT-2's <|endoftext|>.
+        "bos_token_id": chat_template.BOS,
+        "eos_token_id": chat_template.eos_token_ids(),
+        "pad_token_id": chat_template.PAD,
         "r52": cfg.to_dict(),
     }
     if not m.nanochat_compatible:
@@ -100,8 +106,15 @@ def model_config_to_mlx_lm(cfg: Config) -> dict[str, Any]:
     return out
 
 
-def _fetch_tokenizer(out_dir: Path) -> bool:
-    """Copy GPT-2 tokenizer files into ``out_dir``. Returns False if offline."""
+def _fetch_tokenizer(out_dir: Path, model_max_length: int = 1024) -> bool:
+    """Copy GPT-2 tokenizer files into ``out_dir`` and install the chat format.
+
+    Returns ``False`` if no tokenizer could be fetched (offline and nothing cached).
+    The chat special tokens (:mod:`r52.chat_template`) are appended at ids 50257..50264 and
+    the Jinja ``chat_template`` is written into ``tokenizer_config.json``, so
+    ``mlx_lm.generate --apply-chat-template`` / ``mlx_lm.chat`` / ``mlx_lm.server`` work on
+    every export -- base models included, where the tokens simply never fire.
+    """
     try:
         from huggingface_hub import hf_hub_download
     except ImportError:  # pragma: no cover
@@ -114,6 +127,8 @@ def _fetch_tokenizer(out_dir: Path) -> bool:
             continue
         shutil.copyfile(src, out_dir / name)
         got = True
+    if got:
+        chat_template.install_chat_tokenizer(out_dir, model_max_length=model_max_length)
     return got
 
 
@@ -141,7 +156,7 @@ def export_checkpoint(
     if conf["model_type"] == "r52gpt":
         shutil.copyfile(Path(__file__).parent / "mlx_plugin" / "r52gpt.py", out / "r52gpt.py")
 
-    if tokenizer and not _fetch_tokenizer(out):
+    if tokenizer and not _fetch_tokenizer(out, cfg.model.block_size):
         print(f"[r52.export] warning: could not fetch GPT-2 tokenizer files into {out}")
     return out
 
@@ -159,7 +174,7 @@ def export_model(model: GPT, out_dir: str | Path, cfg: Config, dtype: str = "bfl
     if conf["model_type"] == "r52gpt":
         shutil.copyfile(Path(__file__).parent / "mlx_plugin" / "r52gpt.py", out / "r52gpt.py")
     if tokenizer:
-        _fetch_tokenizer(out)
+        _fetch_tokenizer(out, cfg.model.block_size)
     return out
 
 
@@ -174,10 +189,21 @@ def load_exported(path: str | Path):
 
 def gpt2_reference(out_dir: str | Path, dtype: str = "bfloat16") -> Path:
     """Materialise ``openai-community/gpt2`` as an mlx-lm directory (evaluation baseline)."""
+    from huggingface_hub import snapshot_download
     from mlx_lm.convert import convert
 
     out = Path(out_dir)
-    convert(hf_path=_TOKENIZER_REPO, mlx_path=str(out), quantize=False, dtype=dtype)
+    # mlx-lm 0.31.3's `save()` resolves a *repo id* with `snapshot_download(repo,
+    # local_files_only=True)` and no allow-patterns, so it demands every file in the repo --
+    # including the .tflite / onnx / tf / flax weights its own downloader deliberately skips --
+    # and raises IncompleteSnapshotError on `openai-community/gpt2`.  Resolving the snapshot
+    # ourselves and handing `convert` a local *path* takes its `src_path.exists()` branch
+    # instead.  See docs/DEVIATIONS.md, "eval builder".
+    src = snapshot_download(
+        _TOKENIZER_REPO,
+        allow_patterns=["*.json", "model*.safetensors", "*.py", "*.txt", "*.jsonl", "*.jinja"],
+    )
+    convert(hf_path=src, mlx_path=str(out), quantize=False, dtype=dtype)
     return out
 
 

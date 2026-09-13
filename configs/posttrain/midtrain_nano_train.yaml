@@ -1,0 +1,89 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# Midtraining RUN config for the nano model. Data comes from
+#   python scripts/prepare_midtrain_data.py configs/posttrain/midtrain_nano.yaml
+# and the run is launched with the base checkpoint's WEIGHTS only:
+#   python -m r52.posttrain.midtrain configs/posttrain/midtrain_nano_train.yaml \
+#       --init-from runs/a1/ckpt/best --run-name m1
+#
+# Differences from configs/nano_30m.yaml, all of them deliberate:
+#   * data:  data/midtrain (the instruction-seeded mixture), not raw FineWeb.
+#   * LRs:   every group divided by 4. This continues a converged model, so the pretraining
+#            LRs would undo it; /4 keeps the update scale in the range where the loss curve
+#            stays monotone (the same order of reduction Olmo/nanochat use for midtraining).
+#   * schedule: warmup 50 -> constant -> cooldown over the LAST 60% of the run to
+#            final_lr_frac 0.0. docs/PLAN.md §3.1 item 4 calls midtraining "a short,
+#            LR-decaying stage", so unlike pretraining it decays all the way to zero.
+#   * budget: 50M tokens = 763 steps at 65,536 tokens/step.
+name: midtrain_nano
+
+model:
+  n_layer: 8
+  n_embd: 512
+  n_head: 8
+  vocab_size: 50304
+  block_size: 1024
+  rope_base: 10000.0
+  softcap: 15.0
+  qk_norm: true
+  use_value_embeds: true
+  n_value_embeds: 3
+  value_embed_share: true
+  use_unet_skips: true
+  mlp: relu2
+  mlp_ratio: 4.0
+  precision: mixed
+  grad_checkpoint: false
+
+data:
+  source: fineweb                    # the llm.c .bin reader; the corpus is the midtrain mix
+  data_dir: data/midtrain
+  train_glob: "midtrain_train_*.bin"
+  val_file: midtrain_val_000000.bin
+  val_tokens: 1000000
+
+train:
+  micro_batch: 4
+  tokens_per_step: 65536
+
+  muon_lr: 0.00884           # nano_30m 0.03536 / 4
+  muon_momentum: 0.95
+  muon_weight_decay: 0.0
+  muon_nesterov: true
+  muon_ns_steps: 5
+
+  adam_lr_embed: 0.10607     # 0.42426 / 4
+  adam_lr_vembed: 0.10607
+  adam_lr_head: 0.001414     # 0.005657 / 4
+  adam_lr_scalar: 0.007071   # 0.028284 / 4
+  adam_betas_embed: [0.8, 0.95]
+  adam_betas_vembed: [0.75, 0.95]
+  adam_betas_head: [0.5, 0.95]
+  adam_betas_scalar: [0.9, 0.99]
+  adam_eps: 1.0e-10
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  adam_wd_scalar: 0.0
+
+  warmup_steps: 50
+  cooldown_frac: 0.6
+  final_lr_frac: 0.0
+  grad_clip: 0.0
+
+  max_tokens: 50000000       # 50M tokens -> 763 optimizer steps
+  max_hours: 0.0
+  target_val_loss: 0.0
+
+  log_interval: 20
+  val_interval: 100
+  val_max_batches: 64
+  val_micro_batch: 4
+  ckpt_interval: 200
+  keep_last: 2
+  out_dir: runs
+
+  memory_limit_gb: 6.0
+  cache_limit_gb: 1.0
+  seed: 1337
+  compile: true

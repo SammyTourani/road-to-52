@@ -225,3 +225,407 @@ Routes to <= 4 GiB, if the planner wants one: `use_value_embeds: false` (-0.6 Gi
 token-efficiency loss), bf16 AdamW moments for the embedding groups (-0.46 GiB, gives up the fp32
 master-state property), or a smaller vocabulary. The shipped config instead respects the hard
 6 GiB rule at 5.11 GiB and near-peak throughput.
+
+---
+
+# Deviations — eval builder
+
+Builder: evaluation suite (`docs/ARCHITECTURE.md` §6: `r52/eval/`, `scripts/eval.sh`,
+`tests/test_eval*.py`, `results/gpt2-124m-reference/`). Date: 2026-09-13. Machine: Mac Mini M4,
+16 GB, macOS 26.5.2, MLX 0.32.2, mlx-lm 0.31.3 — **with the Rung-0 124M pretraining run holding
+~5.1 GiB of the GPU throughout**, which is why every wall-clock below is a shared-GPU wall-clock.
+
+## E1. llm.c's README carries no HellaSwag number — the docstring does, and it says something different
+
+**Spec §6 / build brief:** "Reference values ... GPT-2 124M acc 0.2955 / acc_norm 0.3117 per
+llm.c's README (`gpt2 (124M) hellaswag 29.55%`, `acc_norm 31.17%`)."
+
+Fetched `karpathy/llm.c` `README.md` on 2026-09-13 (`gh api repos/karpathy/llm.c/contents/README.md`):
+it mentions `gpt2` 19 times and **`hellaswag` zero times**. The primary source is the module
+docstring of `dev/data/hellaswag.py`, which says, verbatim:
+
+```
+gpt2 (124M)
+- eleuther harness reports acc 28.92%, acc_norm 31.14% (multiple choice style)
+- this script: 10042 acc: 0.2859 acc_norm: 0.2955 (completion style)
+```
+
+So the correct reading is: **0.2859 / 0.2955** are llm.c's own completion-style acc / acc_norm —
+the protocol `r52/eval/hellaswag.py` implements — and **0.2892 / 0.3114** are
+lm-evaluation-harness's multiple-choice-style numbers. The brief's "0.2955 acc" and "0.3117
+acc_norm" conflated the two sides. `r52/bar/bar.yaml`'s `gpt2-124m` row (31.1 acc_norm / 29.4 acc,
+both `verified: false`) has the same provenance problem; that file is not ours to edit, but the
+measured local result now supersedes both cells in the gap table.
+
+## E2. HellaSwag: llm.c's protocol and lm-eval's are *not* the same eval
+
+The brief asks for a protocol "identical to llm.c's `dev/data/hellaswag.py` **and** lm-eval's
+`hellaswag`". They differ in two ways and cannot both be satisfied:
+
+| | llm.c (implemented) | lm-eval |
+|---|---|---|
+| context | `ctx` verbatim | rewritten: activity label prefixed, `[...]` stripped, whitespace collapsed |
+| `acc_norm` denominator | number of ending **tokens** | number of ending **characters** |
+
+We implement llm.c's, because it is the one the brief describes in prose (sum of ending log-probs
+for `acc`, length-normalised sum for `acc_norm`) and the one Rung 0's acceptance criterion is
+quoted against. Since it is free from the same forward passes, the results JSON also carries
+**`acc_norm_bytes`** — UTF-8-byte normalisation, i.e. lm-eval's normaliser without lm-eval's text
+rewriting — as the closest honest bridge to the 31.14 % figure.
+
+## E3. `python -m r52.export --gpt2-reference` was broken; minimal fix applied
+
+The first thing the eval suite needs is the GPT-2 reference directory, and the command for it
+raised `huggingface_hub.errors.IncompleteSnapshotError`. Cause: mlx-lm 0.31.3's
+`mlx_lm.utils.save()` re-resolves a *repo id* with `snapshot_download(repo, local_files_only=True)`
+and **no allow-patterns**, so it demands every file in the repo — including the `.tflite`, onnx,
+TensorFlow and Flax weights that its own downloader (`_download`) deliberately skips.
+`openai-community/gpt2` has all of them.
+
+Fix (the one edit this builder made outside its own files): `gpt2_reference()` resolves the
+snapshot itself with the same allow-patterns and passes `convert()` a local **path**, which takes
+its `src_path.exists()` branch. Two lines plus a comment; no behaviour change for any other repo.
+*Worth reporting upstream to ml-explore/mlx-lm.*
+
+## E4. CORE: what the port changes, and why none of it moves the number
+
+`r52/eval/core.py` is a port of nanochat's `nanochat/core_eval.py` + the `evaluate_core` half of
+`scripts/base_eval.py` (MIT, attributed in the file header). Five deliberate differences:
+
+1. **No Jinja2.** The three templates are expanded into string concatenation. The whitespace
+   semantics (`{%- ... -%}`, the blank line between shots, the `| trim` on LM contexts, the
+   `.strip()` on the continuation-free LM prompt) are reproduced exactly and pinned by
+   `tests/test_eval_core.py`. One dependency fewer, identical strings.
+2. **BOS is `<|endoftext|>` (50256).** nanochat prepends its own `<|bos|>` and pads with it; 50256
+   is the GPT-2 tokenizer's equivalent and what GPT-2 itself saw at document boundaries.
+3. **Batching across examples.** nanochat forwards one example at a time. We group whole items up
+   to a `rows * width` budget. This cannot change a score: attention is causal, padding is on the
+   right, and the scored slice `[start-1, end-1)` never reaches the padded tail. Verified
+   empirically — `hellaswag --limit 30` returns 0.4667 at `--max-positions` 4096, 8192 and 16384.
+4. **Two asserts became counted fallbacks.** nanochat asserts (a) that the continuation-free LM
+   prompt is a token prefix of the full one and (b) that cropping to the context window leaves the
+   scored span's start non-negative. Both can fail with GPT-2's BPE and a 1,024-token window on
+   10-shot prompts. Aborting hour six of a run over one item is the wrong trade, so each falls back
+   (longest common prefix; start clamped to 1) and is **counted** in the per-task record as
+   `n_lm_prefix_fallbacks` / `n_clamped_spans`, which are reported alongside the score.
+5. **Few-shot count clamped when `--limit` is small.** `random.sample(available, 10)` raises when a
+   smoke run leaves fewer than ten other items. Full runs are unaffected; only `--limit < shots+1`
+   sees fewer shots.
+
+**Validation against the implementation it came from.** The eval bundle ships nanochat's own
+per-task CSVs. `openai-community-gpt2.csv` gives GPT-2 124M **CORE 0.113891**, and
+`openai-community-gpt2-xl.csv` gives GPT-2 XL **0.256525** — the same number
+`dev/LEADERBOARD.md` quotes as the "time to GPT-2" bar. Our port is compared against the 124M CSV
+task by task in `docs/RESULTS.md`.
+
+## E5. Eval processes get 3 GiB, and the knob that enforces it is `--max-positions`
+
+`docs/ARCHITECTURE.md` §1.2 gives pretraining 6 GiB; evals run *next to* a pretraining run, so
+`r52.eval.lm.configure_runtime` defaults to **3 GiB** (`mx.set_memory_limit`) and 1 GiB of cache.
+As §7 of the core builder's notes says, that is a guideline, not a cap — what actually bounds peak
+memory is `--max-positions` (`rows * tokens` per forward), because an fp32 logits tensor costs
+`positions * 50,304 * 4` bytes. Measured peak on `hellaswag --limit 30`:
+
+| `--max-positions` | peak GiB | wall-clock |
+|---|---|---|
+| 4,096 **(default)** | 1.72 | 29.8 s |
+| 8,192 | 2.66 | 30.5 s |
+| 16,384 | **4.83 — breaches the 3 GiB guideline** | 32.5 s |
+
+Bigger forwards buy nothing here (the GPU is already saturated by the pretraining run), so 4,096
+is the default. `LM.scores` additionally does the fp32 log-sum-exp in 1,024-position slices, so the
+fp32 copy of the logits is never materialised whole.
+
+## E6. Two results files per run, because `gap.py`'s schema and §6's schema disagree
+
+The brief asks for `results/<run>/<eval>.json` with a **structured** `conditions` object plus
+`wall_clock_s` and `machine`; `r52/bar/gap.py`'s docstring documents `results/<run>/eval.json` with
+a **flat `conditions` string** and `command` at the top level, and the brief says gap.py's field
+names win. Both are written:
+
+* `results/<run>/{val_loss,hellaswag,core}.json` — the full record (§6 schema + `metrics`).
+* `results/<run>/eval.json` — a list of the same results in gap.py's exact shape, one entry per
+  benchmark, rewritten in place when a benchmark is re-run.
+
+`gap.py` is untouched; `tests/test_eval_report.py` asserts it parses our file and that the
+`model` / `benchmark` ids resolve against `bar.yaml` (`gpt2-124m` + `fineweb-val-loss` /
+`hellaswag` / `dclm-core`), since unknown ids are silently dropped from the gap table.
+
+## E7. bf16 compute, fp32 reductions — and what that costs against fp32 references
+
+Every eval runs the model in its own compute dtype (bf16 for a mixed-precision `GPT` and for every
+`dtype=bfloat16` export, including `models/gpt2-mlx`) and does every reduction in fp32, which is
+exactly `GPT.loss(..., fp32_logits=True)` — the call `r52.train` uses for the val loss it reports.
+That identity is not approximate: `r52.eval.val_loss` on `runs/tiny200/ckpt/best` returns
+`6.998237788677216` against the trainer's recorded `6.998237788677216`, **difference 0.0**.
+
+Against llm.c's fp32 HellaSwag reference the bf16 forward costs a few examples out of 10,042:
+acc 0.2853 vs 0.2859 (6 examples), acc_norm 0.2938 vs 0.2955 (17 examples). Both references sit
+inside our 95 % Wilson intervals ([0.2766, 0.2942] and [0.2849, 0.3028]). Anyone wanting the fp32
+number can export the reference with `--dtype float32`; the suite is dtype-agnostic.
+
+## E8. The adapter loads models with `mlx_lm.utils.load_model`, not `mlx_lm.load`
+
+**Brief:** "an mlx-lm model loaded from an exported dir (`mlx_lm.load(path)`)".
+
+`mlx_lm.load` returns `(model, tokenizer)` and *requires* tokenizer files in the directory.
+`r52.export.export_checkpoint` fetches them from the Hub, but `export_model` (the test path) and
+any offline export do not — and the suite does not want that tokenizer anyway: §6 fixes the
+tokenizer for every eval here at **GPT-2 tiktoken**, which is what the FineWeb shards, the GPT-2
+reference and our own models are all built on. So `LM.load` calls `mlx_lm.utils.load_model(path)`
+(the function `mlx_lm.load` itself calls, and the one that honours `model_file: "r52gpt.py"`) and
+always pairs it with `r52.tokenizer.GPT2Tokenizer`. An export with no tokenizer files evaluates
+fine; a model needing a *different* tokenizer would need this line changed, and there isn't one at
+Rung 0.
+
+## E9. Full CORE costs hours on a shared M4, and the obvious speed-up was not taken
+
+Measured on this machine with the Rung-0 pretraining run holding the GPU: `hellaswag` (10-shot,
+4 choices, ~550 tokens per row) runs at about **1 second per example**, so that single task is
+~2.8 h of the 22. Raising `--max-positions` does not help (§E5) — the GPU is already saturated.
+
+The real optimisation available is a **shared-prefix KV cache**: in a 10-shot multiple-choice
+task the 4-5 prompts differ only in their last few tokens, so ~95 % of every forward is recomputed
+work, and caching the prefix would cut MC tasks by roughly 3x. It is not implemented, for a reason
+worth recording: `r52.model.GPT.__call__` takes `(idx)` only and has no KV cache, while the
+exported mlx-lm model does. Building the optimisation would therefore give the two halves of the
+adapter **different code paths**, and the entire point of `LM` is that our checkpoints and the
+GPT-2 reference go through the *same* scoring code. Adding a cache to `r52.model.GPT` is the
+prerequisite, and that file belongs to the training builder.
+
+Practical consequence: `scripts/eval.sh <model> standard` (val_loss + HellaSwag, ~1 h for a 124M
+model on a busy GPU) is the loop to run during a training run; `full` (adds CORE) is an overnight
+job. `--limit 50` turns the whole suite into a 46-second smoke test.
+
+## E10. 3.28 is **not** OpenAI's GPT-2 on this split — measured, OpenAI's GPT-2 124M gets 3.447
+
+**Brief:** "Expected ballpark: val loss ≈ 3.3 (the speedrun target 3.28 is defined as GPT-2-small
+quality on this split — report what you measure)."
+
+Measured, full split, block 1024:
+
+```
+python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2
+val_loss 3.447136 nats/token | val_bpb 1.116407 bits/byte | 10,485,760 tokens | 1729.7 s
+```
+
+**3.447, not 3.28** — 0.167 nats worse. That is not a bug in the eval; the same code reproduces
+`r52.train`'s own val loss bit-for-bit (§E7). The 3.28 figure means something else. From
+`KellerJordan/modded-nanogpt`'s README (fetched 2026-09-13,
+`gh api repos/KellerJordan/modded-nanogpt/contents/README.md`), verbatim:
+
+> The target (3.28 validation loss on FineWeb) follows Andrej Karpathy's
+> [GPT-2 replication in llm.c, which attains that loss after running for 45 minutes]
+> (https://github.com/karpathy/llm.c/discussions/481)
+
+> Note: The 3.28 target was selected to match
+> [Andrej Karpathy's GPT-2 (small) reproduction](https://github.com/karpathy/llm.c/discussions/481).
+
+So **3.28 is llm.c's GPT-2-small *reproduction*, trained from scratch on 10B tokens of FineWeb**,
+evaluated on FineWeb's own validation set — not OpenAI's released `gpt2` checkpoint, which was
+trained on WebText and pays a distribution-shift penalty when read out on FineWeb. Both numbers
+are "GPT-2 small"; only one of them was trained on this data.
+
+Consequences for Rung 0 (`docs/ARCHITECTURE.md` §10, `bar.yaml`'s `r52-gpt2-124m-mac` target):
+
+* `fineweb-val-loss <= 3.28` is a **harder** bar than "match OpenAI's GPT-2 124M", which is
+  <= 3.447 on this split. The ladder should say which one it claims. Hitting 3.447 is "as good as
+  OpenAI's GPT-2 small, read out on FineWeb"; hitting 3.28 is "as good as a 10B-token FineWeb
+  reproduction of it", which is the stronger and more expensive claim.
+* The same README pins our protocol exactly — "*obtain a probability model of language which
+  assigns a probability of at least `math.exp(-3.28 * 10485760)` to the first 10,485,760 tokens of
+  the FineWeb valset*" — which is what `r52.eval.val_loss` computes, at block 1024, in fp32.
+* The HellaSwag criterion is unaffected: our measured 0.2938 acc_norm / 0.2853 acc for OpenAI's
+  GPT-2 124M is the right reference for §10's ">= 29.4 %", and that threshold should be read
+  against acc_norm (29.38 %), not acc (28.53 %), or it is unreachable by the model it was copied
+  from.
+
+This is a planner decision, not a builder one, so nothing outside `r52/eval/` was changed; the
+measured numbers and their commands are in `docs/RESULTS.md` and
+`results/gpt2-124m-reference/val_loss.json`.
+
+---
+
+# Deviations — post-training builder
+
+Builder: post-training stack (`docs/PLAN.md` §3.1 items 4-5: `r52/posttrain/`,
+`r52/chat_template.py`, `scripts/prepare_{sft,midtrain}_data.py`,
+`scripts/{sft,rl,chat,serve}.sh`, `configs/posttrain/`, `tests/test_posttrain*.py`).
+Date: 2026-09-13. Machine: Mac Mini M4, 16 GB, MLX 0.32.2, mlx-lm 0.31.3, mlx-lm-lora 3.1.2,
+reasoning-gym 0.1.25 — all measured while the Rung-0 124M pretraining run held ~5.1 GiB of
+the GPU, so every number below comes from a 2-layer model under a 2 GiB limit.
+
+## P1. `mlx_lm.generate` has no `--apply-chat-template` in 0.31.3 — it is the default
+
+The brief asks for `mlx_lm.generate --prompt ... --apply-chat-template`. That flag does not
+exist in mlx-lm 0.31.3: the CLI applies the tokenizer's `chat_template` **by default**, and
+the flag that exists is the opposite one, `--ignore-chat-template`. Measured on our export:
+
+```
+$ python -m mlx_lm generate --model models/sft-tiny-mlx --prompt "What is 2+2?" ...
+Prompt: 10 tokens          # <|bos|><|user_start|>What is 2+2?<|user_end|><|assistant_start|>
+$ ... --ignore-chat-template
+Prompt: 6 tokens           # the raw BPE of "What is 2+2?"
+```
+
+`scripts/chat.sh` therefore passes no template flag and warns if the model directory has no
+`chat_template`.
+
+## P2. Midtraining uses `--init-from` (weights only), not `--resume`
+
+The brief says to midtrain "with `--resume` from the base checkpoint and a fresh, short LR
+schedule". Those two are mutually exclusive as `r52.train` is written, and the conflict is
+not cosmetic: `Trainer._resume` restores `step`, `tokens`, the optimizer moments **and the
+data cursor**. Resuming a 5,722-step base run into a 763-step midtrain config evaluates
+`wsd_multiplier(5722, 763, ...)` on step one — the final learning rate — and points the
+cursor into the FineWeb shards rather than the midtrain ones.
+
+`r52/posttrain/midtrain.py` therefore adds `--init-from`, which loads
+`model.safetensors` only and leaves step 0, fresh optimizer state and a fresh cursor.
+`--resume` still exists there with its normal meaning (continue an interrupted *midtrain*
+run) and the two are rejected together. **`r52/train.py` is unmodified** — midtraining runs
+the stock `Trainer`.
+
+## P3. The chat tokens are 8 ids at 50257, and GPT-2's decoder had to learn about them
+
+`r52/chat_template.py` claims `50257..50264` (`<|bos|>`, `<|user_start|>`, `<|user_end|>`,
+`<|assistant_start|>`, `<|assistant_end|>`, `<|system_start|>`, `<|system_end|>`, `<|pad|>`)
+out of the 47 spare ids in the padded 50,304 vocabulary, so nothing is ever resized. Two
+consequences that needed code:
+
+* **`tiktoken` raises on every one of them.** `enc.decode([50257])` is
+  `KeyError: Invalid token for decoding: 50257`. That breaks `val_bytes_per_token`, i.e. the
+  **bits-per-byte column of every midtrained run**, and it silently emptied sampler output.
+  `GPT2Tokenizer.decode_bytes` now splits the id stream and emits the literal spelling for
+  out-of-vocab ids (unknown spare ids become `<|50303|>`); `decode` routes through it.
+* **`encode_ordinary` was added** so message bodies can never produce a special id — a user
+  who types `<|assistant_start|>` gets its BPE spelling, not id 50260, and therefore cannot
+  forge a turn boundary.
+
+Both are in `r52/tokenizer.py` (the only edits there). `r52/export.py` gained two: the
+`config.json` now carries `bos/eos/pad_token_id` (mlx-lm reads `eos_token_id` from there, so
+generation stops on `<|assistant_end|>` as well as `<|endoftext|>`), and `_fetch_tokenizer`
+calls `chat_template.install_chat_tokenizer`, which appends the eight tokens to
+`tokenizer.json` and writes the Jinja `chat_template` into `tokenizer_config.json`.
+
+`tests/test_posttrain_chat.py::test_jinja_template_matches_render` asserts that the Jinja
+template and `render()` produce **identical ids** through the real Hugging Face tokenizer —
+that equality is the whole reason `mlx_lm.server` sees the training token layout.
+
+## P4. Loss masking needed no change to `GPT` or to the trainer
+
+`GPT.loss` already treats negative targets as `ignore_index`, so assistant-only supervision
+is expressed entirely in the data path: `SFTBatcher` emits `-1` for every system/user/pad
+position. No model or `r52/train.py` change was required, and the reported SFT loss is the
+mean CE **per assistant token**.
+
+## P5. The midtrain mixture had to be scheduled by tokens, not by documents
+
+The YAML weights are shares of *tokens*. Sampling a source per document with probability
+`weight` delivers shares proportional to `weight x mean_document_length`, and the sources
+differ by 3x: a FineWeb chunk is a fixed 2,048 tokens, a smol-smoltalk conversation averages
+~600. Measured on the 1M-token tiny mix:
+
+| scheduler | fineweb | smoltalk | finemath |
+|---|---|---|---|
+| target | 0.600 | 0.300 | 0.100 |
+| per-document sampling (first attempt) | **0.814** | **0.124** | **0.062** |
+| token-deficit sampling (shipped) | 0.599 | 0.300 | 0.101 |
+
+`mix()` now samples in proportion to each source's current token deficit, which is
+self-correcting. The realised shares are written to `<out_dir>/mixture.json` and printed.
+
+## P6. `datasets` streaming deadlocks PyArrow at interpreter exit
+
+Both data scripts finished their work, wrote correct files, and then **hung forever at 0 %
+CPU** inside `arrow::internal::ThreadPool::Shutdown` (`sample`d on the live process;
+pyarrow 25.0.1 + datasets 5.0.1, abandoning a streaming parquet iterator mid-file — the
+same bug surfaces as `Exception ignored in <generator object Parquet._generate_tables>:
+'NoneType' object has no attribute 'ArrowInvalid'`). First observed as a 17-minute "download"
+that was really a teardown deadlock.
+
+`scripts/prepare_sft_data.py` and `scripts/prepare_midtrain_data.py` therefore flush and call
+`os._exit(rc)` instead of returning through interpreter shutdown. Same run afterwards: 8.8 s.
+
+## P7. RL ships the **native** GRPO loop; `mlx-lm-lora` is the second backend
+
+`mlx-lm-lora` **can** load our `model_type: r52gpt` plugin export and train GRPO on it —
+verified end-to-end, both by calling its CLI directly and through
+`r52.posttrain.rl --backend mlx-lm-lora`, which generates the `{prompt, answer}` JSONL plus a
+registered reasoning-gym reward function (`r52_reasoning_gym: cov=100.00%`). So the brief's
+stated fallback condition ("cannot load our plugin model") never fired.
+
+It is still not what the shipped configs train with, for a reason found by reading its
+source and confirmed by its own logs:
+
+* **Its policy log-probabilities are not conditioned on the prompt.** `generate_grpo` stores
+  `tokenizer.encode(completion_text)` — completion ids only — and `grpo_loss` feeds exactly
+  that array to the model (`inputs = mx.stack(padded_completions)`). Its own
+  "Generation Stats / Avg tokens: 16.0" with `--max-completion-length 16` confirms the
+  arrays hold no prompt. The gradient is therefore on `log P(completion)`, not
+  `log P(completion | prompt)` — which is the entire content of RLVR.
+* **DAPO's no-std-norm cannot be expressed**: `calculate_rewards_and_advantages` always
+  divides by `std_reward + 1e-4`.
+* **No dynamic sampling**: zero-variance groups still enter the loss.
+* Completions round-trip through text and are re-encoded, which is lossy for BPE.
+
+`r52/posttrain/rl.py`'s native loop scores with the same verifier but computes
+`token_logprobs` over `prompt + completion` with the mask on completion positions only, and
+implements every DAPO knob (`beta=0`, `epsilon_high > epsilon_low`, token-level
+normalisation over the **batch's** total completion tokens, `std_normalize=False`, dynamic
+sampling). It trains the plugin model directly and writes a ready-to-run mlx-lm directory.
+
+Two honest notes on it:
+
+* **RL runs in fp32.** The export is bf16 and AdamW at 1e-5 is below bf16's resolution, so
+  `GRPOTrainer` upcasts the loaded parameters. Weights are saved back as bf16.
+* **With `inner_epochs=1` the clip is inactive by construction.** On-policy, the policy has
+  not moved since sampling, so the ratio is exactly 1, `clip_frac` is 0 and the surrogate's
+  *value* is ~0 (group-centred advantages cancel) even though the gradient is not — which is
+  why the log reports `|adv|` next to `loss`. `inner_epochs > 1` reuses a batch and is when
+  clip-higher starts to bite.
+
+## P8. `mlx-lm-lora` refuses eval splits smaller than `--batch-size`
+
+`iterate_grpo_batches` raises `ValueError: Dataset must have at least batch_size=N examples`
+and `train_grpo` evaluates *before* the first step, so a proportional 10 % valid split kills
+the run immediately. `run_mlx_lm_lora` now holds out `max(prompts_per_step, 2)` fresh items
+each for `valid` and `test` from the tail of the pool.
+
+## P9. smol-smoltalk's teacher is Llama-3.1-405B, not Qwen2.5 (and it is clean)
+
+Checked on 2026-09-13 against the HF API, the datasets-server and the dataset cards, because
+`docs/ARCHITECTURE.md` §1.1 forbids Claude-derived data:
+
+* `HuggingFaceTB/smol-smoltalk` — `license: apache-2.0`, public, not gated, **460,341** train
+  + 24,229 test rows, features `messages` (`role`/`content`) and `source`.
+* Teacher lineage from the parent `HuggingFaceTB/smoltalk` card: the core *Smol-Magpie-Ultra*
+  split is generated with **Llama-3.1-405B-Instruct**, plus public sets (OpenHermes-2.5,
+  MetaMathQA, NuminaMath-CoT, self-oss-instruct-sc2, SystemChat-2.0, LongAlign).
+  The build brief said Qwen2.5-generated; that is wrong, though the conclusion is unchanged —
+  an open-weight teacher, **no Claude anywhere in the lineage**.
+* Nothing on the `docs/PLAN.md` §5 exclusion list matches. The excluded SmolTalk item is
+  **SmolTalk2's *Preference* split** (it inherits the Tulu-3 preference mixture); this is
+  `smol-smoltalk`'s SFT conversations. `scripts/prepare_sft_data.py` refuses any `--dataset`
+  matching the exclusion list outright.
+
+**One item for the planner:** OpenHermes-2.5 carries GPT-4-derived text, and §5 says
+GPT/Gemini-distilled sets are "avoided by default". It is a minority component and it is
+filterable via the `source` column if the planner wants it gone; nothing was filtered here,
+because §5 names `smol-smoltalk` as *the* SFT choice.
+
+## P10. Drive-by: one `ruff` fix outside the post-training tree
+
+`ruff check scripts` was already failing on `scripts/prepare_data.py:45` (`SIM105`) before
+this work started. Replaced the `try/except OSError: pass` with `contextlib.suppress(OSError)`
+— identical semantics — so that the required `ruff check r52/posttrain r52/chat_template.py
+scripts tests` command is clean. Flagging it because that file belongs to the training-core
+builder.
+
+## P11. `reasoning-gym` pins `tabulate==0.9.0` (a downgrade the eval builder should know about)
+
+Installing `reasoning-gym` downgraded `tabulate` 0.10.0 -> 0.9.0 (its requirement is an
+exact pin, not a floor). Verified harmless for the eval stack: `lm_eval` 0.4.13 declares no
+tabulate constraint, imports cleanly, and `lm_eval.utils.make_table` works; the full suite
+(`pytest -q`, 259 tests) passes afterwards. Noted because a future `uv pip install` that
+tries to raise `tabulate` again will conflict with `reasoning-gym`.

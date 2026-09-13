@@ -1,0 +1,48 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# Midtraining MIXTURE for the nano (~35M) model -- consumed by
+#   python scripts/prepare_midtrain_data.py configs/posttrain/midtrain_nano.yaml
+#
+# docs/PLAN.md §3.1 item 4 sizes midtraining at 1-2% of pretraining tokens and asks that it
+# "deliberately seeds instruction-following and thinking data into the base model".
+# nano pretrains on 0.4B tokens, so 50M tokens is 12.5% -- deliberately above the frontier
+# ratio because at nano scale the chat format is a *new* token vocabulary (the eight chat
+# ids never appear in FineWeb) and needs enough exposure to be learned at all.
+#
+# Weights (share of output tokens):
+#   60% fineweb   the pretraining distribution, so midtraining does not cause forgetting
+#   30% smoltalk  instruction/conversation data, rendered with r52/chat_template.py
+#   10% finemath  math (docs/PLAN.md §5 gives finemath 4plus an 8% slot in the local mix)
+name: midtrain_nano
+out_dir: data/midtrain
+prefix: midtrain
+total_tokens: 50000000
+shard_tokens: 25000000
+val_tokens: 1000000
+seed: 1337
+
+sources:
+  - name: fineweb
+    kind: bin
+    weight: 0.60
+    data_dir: data/fineweb10B-gpt2
+    glob: fineweb_train_*.bin
+
+  - name: smoltalk
+    kind: chat
+    weight: 0.30
+    repo_id: HuggingFaceTB/smol-smoltalk
+    split: train
+    messages_key: messages
+    streaming: true
+    max_seq: 1024
+
+  - name: finemath
+    kind: text
+    weight: 0.10
+    repo_id: HuggingFaceTB/finemath
+    subset: finemath-4plus
+    split: train
+    text_key: text
+    streaming: true
+    max_seq: 2048

@@ -1,0 +1,40 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+# 2-layer SFT used to validate the pipeline (20 steps, seconds of GPU).
+#   python scripts/prepare_sft_data.py --n 1000 --max-seq 256 --out data/sft/smoltalk-1k
+#   python -m r52.posttrain.sft configs/posttrain/sft_tiny.yaml \
+#       --init-from runs/tiny200/ckpt/best --run-name sft-tiny -o max_steps=20
+name: sft_tiny
+init_from: runs/tiny200/ckpt/best
+data_dir: data/sft/smoltalk-1k
+
+max_seq: 128                      # the tiny model's block_size
+micro_batch: 4
+grad_accum: 2
+epochs: 1.0
+pack: false
+pad_multiple: 32
+shuffle_seed: 1337
+val_batches: 4
+
+train:
+  muon_lr: 0.005
+  adam_lr_embed: 0.06
+  adam_lr_vembed: 0.06
+  adam_lr_head: 0.0008
+  adam_lr_scalar: 0.004
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  warmup_steps: 2
+  cooldown_frac: 1.0
+  final_lr_frac: 0.0
+  grad_clip: 1.0
+  log_interval: 5
+  val_interval: 10
+  ckpt_interval: 50
+  keep_last: 1
+  out_dir: runs
+  memory_limit_gb: 2.0
+  cache_limit_gb: 0.5
+  seed: 1337
+  compile: false

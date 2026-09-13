@@ -1,0 +1,36 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+# 1M-token midtraining mixture for pipeline validation with the 2-layer tiny model.
+# Same three sources and weights as midtrain_nano.yaml, 1/50th the size.
+name: midtrain_tiny
+out_dir: data/midtrain-tiny
+prefix: midtrain
+total_tokens: 1000000
+shard_tokens: 1000000
+val_tokens: 50000
+seed: 1337
+
+sources:
+  - name: fineweb
+    kind: bin
+    weight: 0.60
+    data_dir: data/fineweb10B-gpt2
+    glob: fineweb_train_*.bin
+
+  - name: smoltalk
+    kind: chat
+    weight: 0.30
+    repo_id: HuggingFaceTB/smol-smoltalk
+    split: train
+    messages_key: messages
+    streaming: true
+    max_seq: 1024
+
+  - name: finemath
+    kind: text
+    weight: 0.10
+    repo_id: HuggingFaceTB/finemath
+    subset: finemath-4plus
+    split: train
+    text_key: text
+    streaming: true
+    max_seq: 2048

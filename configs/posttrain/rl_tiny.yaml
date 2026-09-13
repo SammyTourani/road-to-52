@@ -1,0 +1,42 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+# 5-step RL used to validate the pipeline on the 2-layer model.
+#   python -m r52.posttrain.rl configs/posttrain/rl_tiny.yaml --model models/tiny200-mlx \
+#       --run-name rl-tiny -o steps=5
+# dynamic_sampling is OFF here: a 2-layer model scores 0 on every completion, so every
+# group has zero variance and a dynamic-sampling run would (correctly) skip every step
+# without ever exercising the gradient path this smoke test exists to check.
+name: rl_tiny
+model: models/tiny200-mlx
+out_dir: runs
+
+tasks: [chain_sum]
+task_size: 256
+task_seed: 42
+use_system_prompt: true
+
+prompts_per_step: 16
+group_size: 4
+max_prompt_tokens: 96
+max_completion_tokens: 24
+temperature: 1.0
+top_p: 1.0
+top_k: 0
+
+beta: 0.0
+epsilon_low: 0.2
+epsilon_high: 0.28
+std_normalize: false
+loss_agg: token
+dynamic_sampling: false
+format_reward: 0.1
+
+steps: 5
+inner_epochs: 1
+learning_rate: 1.0e-5
+grad_clip: 1.0
+warmup_steps: 1
+micro_batch: 8
+seed: 1337
+log_interval: 1
+save_interval: 0
+memory_limit_gb: 2.0

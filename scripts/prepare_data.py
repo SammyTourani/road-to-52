@@ -17,6 +17,7 @@ Examples
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import shutil
 import sys
@@ -42,10 +43,8 @@ def _fetch(repo_id: str, filename: str, out_dir: Path) -> Path:
     tmp = dest.with_suffix(dest.suffix + ".partial")
     shutil.copyfile(cached, tmp)
     tmp.replace(dest)
-    try:
+    with contextlib.suppress(OSError):
         os.remove(cached)
-    except OSError:
-        pass
     return dest
 
 

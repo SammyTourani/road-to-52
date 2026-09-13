@@ -1,0 +1,50 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# DAPO-style GRPO for the nano model on reasoning-gym.
+#   python -m r52.export runs/sft_nano/ckpt/best models/nano-sft-mlx
+#   python -m r52.posttrain.passk models/nano-sft-mlx --task chain_sum -n 64 -k 16   # FIRST
+#   python -m r52.posttrain.rl configs/posttrain/rl_nano.yaml --model models/nano-sft-mlx
+#
+# Run the pass@k probe before this (docs/PLAN.md §3.1 item 5): if pass@k is already high,
+# RL can only sharpen; if it is near zero, every group has zero reward variance, dynamic
+# sampling drops all of them and RL does literally nothing -- pick easier tasks first.
+name: rl_nano
+model: models/nano-sft-mlx
+out_dir: runs
+
+# Easiest-first curriculum: a nano model cannot do multi-step reasoning, so the tasks are
+# the ones whose answer is a short string it has a real chance of sampling.
+tasks: [chain_sum, leg_counting, count_bits]
+task_size: 4000
+task_seed: 42
+use_system_prompt: true
+
+prompts_per_step: 8
+group_size: 8
+max_prompt_tokens: 256
+max_completion_tokens: 96
+temperature: 1.0
+top_p: 1.0
+top_k: 0
+
+# DAPO (arXiv 2503.14476): no KL, clip-higher, token-level loss, no std-norm, dynamic sampling.
+beta: 0.0
+epsilon_low: 0.2
+epsilon_high: 0.28
+std_normalize: false
+loss_agg: token
+dynamic_sampling: true
+format_reward: 0.1              # small nudge toward <answer>...</answer>; the verifier dominates
+
+steps: 200
+inner_epochs: 1
+learning_rate: 1.0e-5
+adam_betas: [0.9, 0.95]
+weight_decay: 0.0
+grad_clip: 1.0
+warmup_steps: 5
+micro_batch: 4
+seed: 1337
+log_interval: 1
+save_interval: 50
+memory_limit_gb: 6.0

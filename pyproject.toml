@@ -16,6 +16,15 @@ dependencies = [
   "huggingface_hub>=0.30",
   "datasets>=3",
   "lm_eval>=0.4.13",
+  # -- post-training (r52/posttrain) --------------------------------------------------
+  # reasoning-gym: procedural RLVR environments + their verifiers (Apache-2.0);
+  #   docs/PLAN.md §5's RL environment choice. Pulls matplotlib/sympy/arckit for the
+  #   puzzle generators and pins tabulate<0.10 (harmless for lm_eval).
+  "reasoning-gym>=0.1.25",
+  # mlx-lm-lora: the DPO/GRPO/GSPO/DAPO layer for MLX (Apache-2.0, research/02 §Stage 9).
+  #   Used as the alternative RL backend (`--backend mlx-lm-lora`), driven as a CLI,
+  #   never vendored.
+  "mlx-lm-lora>=3.1.2",
 ]
 
 [project.optional-dependencies]
