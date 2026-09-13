@@ -431,7 +431,9 @@ def test_committed_results_are_up_to_date(bar: G.Bar) -> None:
     if not committed.is_file():
         pytest.skip("results/GAP.json not rendered yet")
     payload = json.loads(committed.read_text(encoding="utf-8"))
-    fresh = G.render_json(bar, generated=payload["generated"])
+    # render exactly as `python -m r52.bar` does: bar.yaml merged with the committed results/
+    merged = G.merge_local(G.load_bar(), G.load_local_results())
+    fresh = G.render_json(merged, generated=payload["generated"])
     assert payload["groups"] == fresh["groups"]
 
 
