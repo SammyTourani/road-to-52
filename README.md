@@ -1,5 +1,7 @@
 # road-to-52
 
+[![ci](https://github.com/SammyTourani/road-to-52/actions/workflows/ci.yml/badge.svg)](https://github.com/SammyTourani/road-to-52/actions/workflows/ci.yml)
+
 **An open, Apple-Silicon-native LLM build stack, and a public ladder of capability-per-dollar —
 measured honestly against the frontier.**
 
