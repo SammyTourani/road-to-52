@@ -84,10 +84,12 @@ results/        committed benchmark tables, ladder, gap tracker, eval JSON
 git clone https://github.com/SammyTourani/road-to-52 && cd road-to-52
 uv venv --python 3.12 .venv && VIRTUAL_ENV=$PWD/.venv uv pip install -e ".[dev]"
 .venv/bin/python -m pytest -q                      # < 60 s
-.venv/bin/python scripts/prepare_data.py --shards 8 # FineWeb (GPT-2 tokens), ~1.6 GB
+.venv/bin/python scripts/prepare_data.py --train-shards 8  # FineWeb (GPT-2 tokens), ~1.8 GB
 scripts/bench.sh                                   # MLX pretraining throughput table
 scripts/train.sh configs/nano_30m.yaml nano-a      # background run, logs in runs/nano-a/
 ```
+
+Full walkthrough (exact commands, measured timings, what to look at in the logs): [`docs/TUTORIAL.md`](docs/TUTORIAL.md).
 
 ## Rules this project follows
 
