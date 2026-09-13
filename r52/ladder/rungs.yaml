@@ -1,0 +1,371 @@
+# Copyright 2026 The road-to-52 authors.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The compute ladder: named-model beats at documented cost.
+#
+# Method (research/04-landscape-and-compute.md §B.5):
+#     FLOPs      = 6 * N_active * D
+#     GPU-hours  = FLOPs / (peak_TFLOPS * MFU * 3600)
+#     wall-clock = GPU-hours / n_gpus
+#     cost       = GPU-hours * $/GPU-hour
+#
+# MFU is calibrated against three disclosed runs (see kind: reference rows below):
+# SmolLM3 25.7%, DeepSeek-V3 33.1%, Llama 3.1 405B 34.6%.  research/04 §B.5: "Use 35% MFU for
+# large runs, ~26% for small / long-context-heavy runs."
+#
+# Every row carries `beats` (the named model it targets), `status`, and `notes`.
+# `kind` is one of: rung (ours to run) | reference (someone else's disclosed run, used for
+# calibration) | frontier (a FLOPs range, no disclosed cost).
+
+meta:
+  retrieved: "2026-09-13"
+  compiled_from:
+    - "research/04-landscape-and-compute.md §B.1 (disclosed training compute and cost)"
+    - "research/04-landscape-and-compute.md §B.5 (the compute ladder + MFU calibration)"
+    - "research/02-open-training-stack.md §'The speedruns -- current records' (nanochat LEADERBOARD.md)"
+    - "docs/ARCHITECTURE.md §10 (run plan) for Rung 0's params/token budget"
+  default_mfu_large: 0.35
+  default_mfu_small: 0.26
+
+rungs:
+
+  # =====================================================================================
+  # The ladder proper
+  # =====================================================================================
+
+  - id: rung-0-gpt2-124m-mac
+    kind: rung
+    name: "Rung 0 -- GPT-2 small, from scratch, on a Mac Mini"
+    params_total: 124.0e6
+    params_active: 124.0e6
+    tokens: 0.75e9
+    mfu: 0.3052
+    hardware: mac_m4_10core
+    gpus: 1
+    price: mac_m4_owned
+    beats: "GPT-2 small (124M, 2019)"
+    status: planned
+    targets:
+      fineweb_val_loss: 3.28
+      hellaswag_acc: 0.294
+      dclm_core: "GPT-2 small reference, to be measured by us"
+    notes: >-
+      docs/ARCHITECTURE.md §10 Run B: 124M params, seq 1024, <=0.75B tokens, target val loss
+      <= 3.28.  MFU 0.3052 is exactly the measured training-effective 1.3 TFLOPS divided by the
+      4.26 TFLOPS theoretical FP32 peak (both measured 2026-09-13, road-to-52 probe; the 1.3
+      figure was measured at 111M params, not 124M, so treat the wall-clock as +/- one bucket).
+      The resulting ~119 h / ~5.0 days agrees with ARCHITECTURE §10's independent "4-6 days"
+      estimate.  Cost is the *marginal* cost of hardware we already own -- $0, not "free".
+
+  - id: rung-1-nanochat-1b
+    kind: rung
+    name: "Rung 1 -- nanochat-class 1B on a rented 8xH100 node"
+    params_total: 1.0e9
+    params_active: 1.0e9
+    tokens: 20.0e9
+    mfu: 0.35
+    hardware: h100
+    gpus: 8
+    price: h100_spot_prime_intellect
+    beats: "GPT-2 XL (1.6B, 2019) -- CORE 0.256525, ~168 h on 32 TPUv3, ~$43K in 2019"
+    status: planned
+    notes: >-
+      Chinchilla-optimal 1B/20B, the "1B dense" row of research/04 §B.5 (1.20e20 FLOP, 96 H100-h
+      @35% MFU, $91 spot / $234 on-demand).  CAVEAT, and it matters: nanochat's own record run
+      (Run 6, 2026-03-14) reached CORE 0.262634 in 1.65 h on 8xH100 -- 13.2 H100-hours, ~$20 spot
+      / ~$40 on-demand -- i.e. roughly 7x cheaper than this row.  nanochat does not disclose that
+      run's exact N and D in either research/02 or research/04, so this row uses the
+      Chinchilla-optimal 1B/20B shape rather than reverse-engineering them.  The disclosed
+      nanochat figures are carried verbatim in the `ref-nanochat-speedrun-record` row below;
+      treat that row, not this one, as the real price of nanochat-class capability.
+    see_also: ref-nanochat-speedrun-record
+
+  - id: rung-2-dense-3b
+    kind: rung
+    name: "Rung 2 -- 3B dense, Chinchilla-optimal"
+    params_total: 3.0e9
+    params_active: 3.0e9
+    tokens: 60.0e9
+    mfu: 0.35
+    hardware: h100
+    gpus: 8
+    price: h100_spot_prime_intellect
+    beats: "(no named model claimed -- see notes)"
+    status: planned
+    notes: >-
+      research/04 §B.5 Chinchilla-optimal table: 1.08e21 FLOP, 867 H100-h @35%, $815 spot /
+      $2.1k on-demand / 444 B200-h @30% ($1.6k).  Four and a half node-days on one 8xH100 box.
+      NO NAMED MODEL IS CLAIMED HERE.  research/04 gives this rung's cost but no capability
+      result, and the obvious same-size comparator does not hold: SmolLM3 is also 3B but saw
+      11.2T tokens, 187x this budget.  The `beats` cell stays empty until we measure something.
+
+  - id: rung-2-moe-30b-a3b
+    kind: rung
+    name: "Rung 2 (MoE) -- 30B-A3B, Chinchilla-optimal on active params"
+    params_total: 30.0e9
+    params_active: 3.0e9
+    tokens: 60.0e9
+    mfu: 0.35
+    hardware: h100
+    gpus: 8
+    price: h100_spot_prime_intellect
+    beats: "Qwen3-30B-A3B-shaped capacity for a 3B-dense training bill"
+    status: planned
+    notes: >-
+      Identical cost to `rung-2-dense-3b` because training compute scales with *active*
+      parameters.  research/04 §B.5 reading 1: "The MoE active-parameter trick is the whole
+      game... You get 30B of capacity for a 3B training bill.  This is exactly why
+      Qwen3-30B-A3B-shaped models exist, and why DeepSeek-V4.1-Flash runs a 552B backbone at
+      8B prefill / 16B decode."  Inference memory is a different bill entirely and is not
+      modelled here.
+
+  - id: rung-2b-3b-150b-tokens
+    kind: rung
+    name: "Rung 2b -- 3B dense (or 30B-A3B) on 150B tokens: the $2,000 budget"
+    params_total: 3.0e9
+    params_active: 3.0e9
+    tokens: 150.0e9
+    mfu: 0.35
+    hardware: h100
+    gpus: 8
+    price: h100_spot_prime_intellect
+    beats: "(no named model claimed -- this is simply the most compute $2,000 buys)"
+    status: planned
+    notes: >-
+      research/04 §B.5 "What $2,000 actually buys": at Prime Intellect spot ($0.94/H100-h),
+      $2,000 = 2,128 H100-hours = 266 hours on an 8xH100 node = 11.1 node-days = 2.65e21 FLOP at
+      35% MFU, which is a 3B dense or 30B-A3B MoE on *147B* tokens.  This row rounds to 150B, so
+      it lands a little over budget ($2,037) -- the honest ceiling is 147B tokens for exactly
+      $2,000.  research/04's verdict on this rung: "The affordable rungs produce nothing that
+      beats Fable 5.1 at anything general.  The money must go into post-training, scaffolding,
+      and inference."
+
+  - id: rung-3-dense-8b
+    kind: rung
+    name: "Rung 3 -- 8B dense, Chinchilla-optimal"
+    params_total: 8.0e9
+    params_active: 8.0e9
+    tokens: 160.0e9
+    mfu: 0.35
+    hardware: h100
+    gpus: 64
+    price: h100_spot_prime_intellect
+    beats: "Llama 3.1 8B's parameter count at 1/94th its token budget -- a size match, not a quality claim"
+    status: planned
+    notes: >-
+      research/04 §B.5: 7.68e21 FLOP, 6.2k H100-h @35%, $5.8k spot / $15.0k on-demand /
+      3.2k B200-h @30% ($11.0k).  Sized at 64 GPUs so the wall-clock is ~4 days rather than a
+      month on one node; the dollar cost is unchanged, only the calendar is.  Well past the
+      $2,000 budget -- this rung needs a Prime Intellect Fast Compute Grant (research/04 §B.4:
+      $500-$100,000, 5-10 day decisions, open to anyone) or Alliance/Fir time via a sponsoring
+      McMaster PI.
+
+  # =====================================================================================
+  # Calibration / reference rows -- runs somebody else actually did and disclosed.
+  # These are what the MFU model is fitted against; tests assert the implied MFUs.
+  # =====================================================================================
+
+  - id: ref-nanochat-speedrun-record
+    kind: reference
+    name: "nanochat record (Run 6, 2026-03-14) -- 8xH100, 1.65 h"
+    params_total: null
+    params_active: null
+    tokens: null
+    mfu: null
+    hardware: h100
+    gpus: 8
+    price: h100_spot_prime_intellect
+    beats: "GPT-2 XL (1.6B) -- CORE 0.262634 vs 0.256525"
+    status: done
+    disclosed:
+      gpu_hours: 13.2
+      gpu_hours_unit: "H100-hours (1.65 h wall-clock x 8 GPUs)"
+      wall_clock_hours: 1.65
+      cost_usd_spot: 20.0
+      cost_usd_on_demand: 40.0
+      source_url: "https://raw.githubusercontent.com/karpathy/nanochat/master/dev/LEADERBOARD.md"
+      retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.1 Tier 1 and research/02's speedruns table.  CORE 0.262634, beating GPT-2
+      (1.6B)'s 0.256525.  On-demand ~$40 @ $3/GPU-h, ~$20 spot.  Time-to-GPT-2 fell 3.04 h ->
+      1.65 h in seven weeks; against the 2019 baseline, training time dropped 98.8% over seven
+      years (168 h -> ~2 h).  N and D are NOT disclosed in our sources, so no FLOPs, no implied
+      MFU, and no computed cost for this row -- only what the leaderboard states.  The
+      $300/$1000 nanochat tiers are tagged UNVERIFIED in research/04 and are omitted.
+
+  - id: ref-modded-nanogpt-record
+    kind: reference
+    name: "modded-nanogpt speedrun record #89 (2026-07-17) -- 124M to 3.28 val loss, 8xH100"
+    params_total: 124.0e6
+    params_active: 124.0e6
+    tokens: null
+    mfu: null
+    hardware: h100
+    gpus: 8
+    price: h100_spot_prime_intellect
+    beats: "the llm.c GPT-2 baseline (45 min, 2024-05-28) -- same 3.28 FineWeb val loss"
+    status: done
+    disclosed:
+      gpu_hours: 0.164
+      gpu_hours_unit: "H100-hours (1.23 min wall-clock x 8 GPUs)"
+      wall_clock_hours: 0.0205
+      source_url: "https://github.com/KellerJordan/modded-nanogpt"
+      retrieved: "2026-09-13"
+    notes: >-
+      research/02: record 1.23 minutes, set 2026-07-17, via "MLP down projection in FP8 with
+      efficient delayed scaling metric".  Stack: Muon, FlashAttention-3, value embeddings, logit
+      softcapping, FP8 quantization, paired-head attention, learnable XSA.  This is the direct
+      quality bar for Rung 0 -- same parameter count, same val-loss target (3.28), on 8xH100 in
+      73 seconds instead of ~5 days on one M4.  Token count is not disclosed per-record, so no
+      FLOPs are computed.
+
+  - id: ref-smollm3-3b
+    kind: reference
+    name: "SmolLM3 3B (HuggingFace) -- 384 H100s x 24 days"
+    params_total: 3.0e9
+    params_active: 3.0e9
+    tokens: 11.2e12
+    mfu: 0.257
+    hardware: h100
+    gpus: 384
+    price: h100_spot_prime_intellect
+    beats: null
+    status: done
+    disclosed:
+      gpu_hours: 220000.0
+      gpu_hours_unit: "H100-hours"
+      wall_clock_hours: 576.0
+      implied_mfu_published: 0.257
+      cost_estimate_spot_usd: 207000.0
+      cost_estimate_on_demand_usd: 535000.0
+      source_url: "https://huggingface.co/blog/smollm3"
+      retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.1 Tier 2 and §B.5's calibration table: 2.02e23 FLOP, 220k H100-h, implied
+      MFU 25.7%.  This is the low anchor of the MFU model -- small models and long-context-heavy
+      recipes do not reach 35%.
+
+  - id: ref-deepseek-v3
+    kind: reference
+    name: "DeepSeek-V3 671B-A37B -- 2.788M H800-hours, $5.576M disclosed"
+    params_total: 671.0e9
+    params_active: 37.0e9
+    tokens: 14.8e12
+    mfu: 0.331
+    hardware: h800
+    gpus: null
+    price: h100_spot_prime_intellect
+    beats: null
+    status: done
+    disclosed:
+      gpu_hours: 2788000.0
+      gpu_hours_unit: "H800-hours"
+      implied_mfu_published: 0.331
+      cost_usd: 5576000.0
+      cost_basis: "assumed $2/H800-hour; official run only, excludes prior research and ablations"
+      source_url: "https://arxiv.org/pdf/2412.19437"
+      retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.5: the ladder's 35%/30% MFU choice "reproduces DeepSeek-V3's disclosed cost
+      to within ~4%".  The $5.576M figure is the official run only; DeepSeek explicitly notes the
+      prior research and ablation budget was separate and much larger.  Related datapoint
+      (research/04 §B.1 Tier 3): DeepSeek-R1's RL stage alone was ~$294,000 (R1-Zero 648 H800 x
+      ~198 h = 128k H800-h; R1 648 x ~80 h = 52k) on top of that base -- "the single most
+      important datapoint here for a small team".
+
+  - id: ref-llama-3-1-405b
+    kind: reference
+    name: "Llama 3.1 405B dense -- 30.84M H100-hours"
+    params_total: 405.0e9
+    params_active: 405.0e9
+    tokens: 15.6e12
+    mfu: 0.346
+    hardware: h100
+    gpus: 16000
+    price: h100_spot_prime_intellect
+    beats: null
+    status: done
+    disclosed:
+      gpu_hours: 30840000.0
+      gpu_hours_unit: "H100-hours"
+      implied_mfu_published: 0.346
+      source_url: "https://huggingface.co/blog/llama31"
+      retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.5's high anchor: 3.80e25 FLOP, 30.84M H100-h, implied MFU 34.6% (the Llama-3
+      family total was 39.3M H100-h: 1.46M for 8B, 7.0M for 70B).  Epoch's independent read
+      (16k H100s x 380 TFLOP/s x 6.25M s = 3.8e25 FLOP, ~72 days) implies 38.4%.  The token count
+      here is 15.6T; research/04 states "15T+" and quotes the FLOPs as 3.80e25, which pins D at
+      ~15.6T.
+
+  - id: ref-kimi-k2-scale
+    kind: reference
+    name: "Kimi K2 scale -- 1T-A32B MoE, 15.5T tokens (modelled, nothing disclosed)"
+    params_total: 1000.0e9
+    params_active: 32.0e9
+    tokens: 15.5e12
+    mfu: 0.35
+    hardware: h100
+    gpus: null
+    price: h100_spot_prime_intellect
+    beats: null
+    status: done
+    notes: >-
+      research/04 §B.5 overtrained table: 2.98e24 FLOP, 2.39M H100-h @35%, $2.24M spot / $5.80M
+      on-demand.  MODELLED, NOT DISCLOSED -- research/04 §B.1: "No Chinese frontier lab disclosed
+      GPU-hours or FLOPs for any 2026 model (Kimi K3, GLM-5.3, Qwen3.8, DeepSeek V4).  All
+      UNVERIFIED."
+    verified: false
+
+  - id: ref-kimi-k3-scale
+    kind: reference
+    name: "Kimi K3 scale -- 2.8T-A104B MoE, 15T tokens (modelled, nothing disclosed)"
+    params_total: 2800.0e9
+    params_active: 104.0e9
+    tokens: 15.0e12
+    mfu: 0.35
+    hardware: h100
+    gpus: null
+    price: h100_spot_prime_intellect
+    beats: null
+    status: done
+    notes: >-
+      research/04 §B.5 overtrained table: 9.36e24 FLOP, 7.51M H100-h @35%, $7.06M spot / $18.25M
+      on-demand.  MODELLED, NOT DISCLOSED (see `ref-kimi-k2-scale`).  Kimi K3 is the best open
+      model on Epoch's ECI (157.6) and is the open-weight model that beat Claude Fable 5.1 on
+      GPQA Diamond -- so this row is the honest price tag on "best open weights", and it is
+      three orders of magnitude past the $2,000 budget.
+    verified: false
+
+  # =====================================================================================
+  # The frontier: a FLOPs range, because nobody discloses anything else.
+  # =====================================================================================
+
+  - id: frontier-fable-class
+    kind: frontier
+    name: "Frontier (Fable-class), 2026 -- 1e26 to 1e27 FLOP"
+    params_total: null
+    params_active: null
+    tokens: null
+    flops_low: 1.0e26
+    flops_high: 1.0e27
+    mfu: 0.35
+    hardware: h100
+    gpus: null
+    price: h100_spot_prime_intellect
+    beats: "n/a -- this is the bar, not a rung"
+    status: done
+    verified: false
+    notes: >-
+      research/04 §B.1 Tier 4: "Frontier 2026 runs: 1e26 - 1e27 FLOP; ~$200-500M/run (GPT-5 /
+      Gemini Ultra class)" -- tagged UNVERIFIED secondary, and research/04 adds the important
+      correction that "Epoch's cost article does not publish per-model dollar figures... Per-model
+      2026 cost claims on secondary sites are NOT Epoch-sourced."  ANTHROPIC HAS DISCLOSED
+      NOTHING for Fable 5 / Fable 5.1 / Opus 5: no GPU-hours, no FLOPs, no cost.  The dollar
+      figures this ladder prints for this row are our own 6ND-style arithmetic at 35% MFU on
+      September-2026 rental prices, not a disclosure and not an Epoch estimate.  What Epoch does
+      publish (research/04 §B.1 Tier 4): frontier training cost has grown 2.4x/year since 2016
+      (95% CI 2.0-3.1x); hardware is 47-67% of cost, R&D staff 29-49%, energy 2-6%; and "the
+      largest training runs will cost more than a billion dollars by 2027".  research/04 §B.5
+      reading 2: "The frontier is 1e26-1e27 FLOP; this ladder's largest row is 9.4e24.  A student
+      is two orders of magnitude short at minimum."

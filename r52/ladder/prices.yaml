@@ -1,0 +1,664 @@
+# Copyright 2026 The road-to-52 authors.
+# SPDX-License-Identifier: Apache-2.0
+#
+# GPU/accelerator rental prices and peak-FLOPS figures for the compute ladder.
+#
+# HONEST-NUMBERS RULE (docs/ARCHITECTURE.md §1.3): every row carries a source URL and a
+# retrieval date.  The one exception is an in-house measurement, which carries
+# `measured: true` plus a `source` string instead of a URL (see `mac_m4_10core`).
+#
+# All prices are USD per *accelerator* hour (per GPU, per chip for TPUs).
+# Everything here is transcribed from research/04-landscape-and-compute.md §B.2/§B.3/§B.5,
+# which was compiled and link-checked on 2026-09-13.
+
+meta:
+  retrieved: "2026-09-13"
+  currency: USD
+  compiled_from:
+    - "research/04-landscape-and-compute.md §B.2 (GPU rental prices, September 2026)"
+    - "research/04-landscape-and-compute.md §B.3 (Google TPU pricing)"
+    - "research/04-landscape-and-compute.md §B.5 (the compute ladder: peak TFLOPS + price floors)"
+  notes: >-
+    research/04 §B.5 fixes the ladder's price floors as "the verified Sept 2026 floors from §B.2:
+    H100 spot $0.94, H100 on-demand $2.43, B200 $3.49".  Rows marked `verified: false` are
+    third-party quotes that research/04 itself tags UNVERIFIED; the ladder never selects them
+    when resolving a cheapest-spot / cheapest-on-demand price.
+
+# ---------------------------------------------------------------------------------------
+# Accelerators.  `peak_tflops` is dense BF16 unless `peak_basis` says otherwise, and is set
+# ONLY where research/04 states or derives it.  Where the research corpus carries no figure
+# it is left null rather than guessed -- no rung uses those accelerators.
+# ---------------------------------------------------------------------------------------
+hardware:
+
+  h100:
+    name: NVIDIA H100 SXM 80GB
+    peak_tflops: 989.0
+    peak_basis: "BF16 dense"
+    source: "research/04 §B.5: 'H100 SXM peak BF16 dense = 989 TFLOP/s'"
+    source_url: "https://arxiv.org/pdf/2412.19437"
+    retrieved: "2026-09-13"
+    notes: >-
+      989 TFLOP/s is the figure research/04 §B.5 uses as the ladder denominator and the one
+      against which the three calibration runs (SmolLM3, DeepSeek-V3, Llama 3.1 405B) reproduce
+      their published implied MFUs.
+
+  h800:
+    name: NVIDIA H800 SXM 80GB
+    peak_tflops: 989.0
+    peak_basis: "BF16 dense (same as H100)"
+    source: >-
+      Derived from research/04 §B.5, which converts DeepSeek-V3's disclosed 2.788M H800-hours to
+      an implied MFU of 33.1% using the H100 bf16 dense peak -- i.e. §B.5 treats H800 as
+      compute-identical to H100 (the export-control difference is interconnect, not FLOPS).
+    source_url: "https://arxiv.org/pdf/2412.19437"
+    retrieved: "2026-09-13"
+    derived: true
+
+  h100_pcie:
+    name: NVIDIA H100 PCIe 80GB
+    peak_tflops: null
+    peak_basis: null
+    source: >-
+      research/04 §B.2 carries a RunPod PCIe price but no PCIe peak-FLOPS figure.  The PCIe part
+      is materially slower than the 989 TFLOP/s SXM part, so it gets its own key and a null peak
+      rather than inheriting the SXM number -- otherwise its $1.99 rate would silently become the
+      H100 "on-demand floor" and undercut the $2.43 figure research/04 §B.5 actually uses.
+    source_url: "https://www.runpod.io/pricing"
+    retrieved: "2026-09-13"
+
+  h200:
+    name: NVIDIA H200 SXM 141GB
+    peak_tflops: null
+    peak_basis: null
+    source: >-
+      research/04 carries H200 *prices* (§B.2) but no peak-FLOPS figure.  Left null rather than
+      asserted; no ladder rung uses an H200.
+    source_url: "https://www.runpod.io/pricing"
+    retrieved: "2026-09-13"
+
+  b200:
+    name: NVIDIA B200 192GB
+    peak_tflops: 2250.0
+    peak_basis: "BF16 dense"
+    source: "research/04 §B.5: 'B200 = 2250 TFLOP/s'"
+    source_url: "https://www.thundercompute.com/blog/nvidia-b200-pricing"
+    retrieved: "2026-09-13"
+
+  b300:
+    name: NVIDIA B300 288GB
+    peak_tflops: null
+    peak_basis: null
+    source: "research/04 §B.2 prices only; no peak-FLOPS figure in the research corpus."
+    source_url: "https://www.runpod.io/pricing"
+    retrieved: "2026-09-13"
+
+  gb200:
+    name: NVIDIA GB200 NVL72 (per-GPU)
+    peak_tflops: null
+    peak_basis: null
+    source: "research/04 §B.2 prices only; no peak-FLOPS figure in the research corpus."
+    source_url: "https://www.coreweave.com/pricing"
+    retrieved: "2026-09-13"
+
+  mi300x:
+    name: AMD Instinct MI300X 192GB
+    peak_tflops: null
+    peak_basis: null
+    source: "research/04 §B.2 (AMD) prices only; no peak-FLOPS figure in the research corpus."
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+
+  mi355x:
+    name: AMD Instinct MI355X 288GB
+    peak_tflops: null
+    peak_basis: null
+    source: "research/04 §B.2 (AMD) prices only; no peak-FLOPS figure in the research corpus."
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+
+  tpu_v5e:
+    name: Google Cloud TPU v5e (per chip)
+    peak_tflops: null
+    peak_basis: null
+    source: "research/04 §B.3 is first-party pricing only; it carries no TPU peak-FLOPS figures."
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+
+  tpu_v6e:
+    name: Google Cloud TPU v6e "Trillium" (per chip)
+    peak_tflops: null
+    peak_basis: null
+    source: "research/04 §B.3 is first-party pricing only; it carries no TPU peak-FLOPS figures."
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+
+  tpu_v7:
+    name: Google Cloud TPU v7 "Ironwood" (per chip)
+    peak_tflops: null
+    peak_basis: null
+    source: >-
+      research/04 §B.3: Ironwood (v7) is GA and publicly priced as of Sept 2026, but the research
+      corpus carries no peak-FLOPS figure.
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+
+  mac_m4_10core:
+    name: Apple M4 (10-core GPU) -- Mac Mini, 16 GB unified memory
+    peak_tflops: 4.26
+    peak_basis: "theoretical FP32"
+    measured: true
+    source: "measured 2026-09-13, road-to-52 probe (this machine: Mac Mini M4, 16 GB, macOS 26.5.2)"
+    source_url: null
+    retrieved: "2026-09-13"
+    measurements:
+      theoretical_fp32_tflops: 4.26
+      bf16_matmul_tflops: 3.6
+      training_effective_tflops: 1.3
+      training_effective_at_params: 111.0e6
+    notes: >-
+      Three numbers, three meanings.  4.26 TFLOPS is the theoretical FP32 peak and is the ladder
+      denominator for this accelerator.  3.6 TFLOPS is the measured peak of a raw bf16 matmul.
+      1.3 TFLOPS is the measured *training-effective* rate at 111M parameters -- the whole step,
+      not just the matmul -- so Rung 0's MFU of 0.3052 is exactly 1.3 / 4.26.  Report MFU against
+      both denominators, as docs/ARCHITECTURE.md §4 requires.
+
+# ---------------------------------------------------------------------------------------
+# Rental prices.  `kind` is one of: spot | on-demand | reserved | flex-start | marketplace.
+# `kind_inferred: true` marks a row whose spot/on-demand label research/04 did not state
+# explicitly and which we inferred from the surrounding table (always flagged, never silent).
+# ---------------------------------------------------------------------------------------
+prices:
+
+  # -- H100 SXM 80GB -----------------------------------------------------------------
+  - id: h100_spot_prime_intellect
+    provider: Prime Intellect
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 0.94
+    kind: spot
+    verified: true
+    source_url: "https://primeintellect.ai"
+    retrieved: "2026-09-13"
+    notes: "research/04 §B.2: 'Cheapest credible: Prime Intellect spot $0.94.' The ladder's spot floor."
+
+  - id: h100_ondemand_prime_intellect
+    provider: Prime Intellect
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 2.43
+    kind: on-demand
+    verified: true
+    source_url: "https://primeintellect.ai"
+    retrieved: "2026-09-13"
+    notes: "The ladder's on-demand floor (research/04 §B.5)."
+
+  - id: h100_spot_sfcompute
+    provider: SF Compute
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 2.03
+    kind: spot
+    verified: true
+    source_url: "https://sfcompute.com/prices"
+    retrieved: "2026-09-13"
+    notes: >-
+      Spot market clearing price, Aug 15 - Sep 11 2026.  research/04 §B.2 calls this "the most
+      honest market signal" for non-interruptible capacity.
+
+  - id: h100_spot_nebius_preemptible
+    provider: Nebius
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 2.15
+    kind: spot
+    verified: true
+    source_url: "https://nebius.com/prices"
+    retrieved: "2026-09-13"
+    notes: "Labelled 'preemptible' in research/04 §B.2."
+
+  - id: h100_spot_coreweave
+    provider: CoreWeave
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 2.46
+    kind: spot
+    verified: true
+    source_url: "https://www.coreweave.com/pricing"
+    retrieved: "2026-09-13"
+
+  - id: h100_marketplace_vast
+    provider: Vast.ai
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 1.49
+    kind: marketplace
+    verified: false
+    source_url: "https://www.spheron.network/blog/vastai-pricing-2026"
+    retrieved: "2026-09-13"
+    notes: >-
+      Range $1.49-$2.27, marketplace/interruptible.  research/04 §B.2 tags this UNVERIFIED
+      (third-party); Vast's own floor is quoted as "from $1.60".  Excluded from price-floor
+      resolution.
+
+  - id: h100_pcie_ondemand_runpod_community
+    provider: RunPod
+    gpu: H100 PCIe 80GB
+    hardware: h100_pcie
+    usd_per_gpu_hour: 1.99
+    kind: on-demand
+    verified: true
+    source_url: "https://www.runpod.io/pricing"
+    retrieved: "2026-09-13"
+    notes: >-
+      "Community" tier, PCIe (not SXM) -- lower interconnect and a lower dense peak than the
+      989 TFLOP/s SXM figure this file records for `h100`.  Filed under its own `h100_pcie`
+      hardware key so it cannot be mistaken for the SXM on-demand floor ($2.43).
+
+  - id: h100_ondemand_lambda
+    provider: Lambda
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 3.99
+    kind: on-demand
+    verified: true
+    source_url: "https://lambda.ai/pricing"
+    retrieved: "2026-09-13"
+    notes: "Quoted range $3.99-$4.29."
+
+  - id: h100_ondemand_modal
+    provider: Modal
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 3.95
+    kind: on-demand
+    verified: true
+    source_url: "https://modal.com/pricing"
+    retrieved: "2026-09-13"
+    notes: >-
+      Per-second billing.  research/04 §B.4 notes Modal gives $30/month of free compute, i.e.
+      ~7.6 free H100-hours per month.
+
+  - id: h100_ondemand_aws_p5
+    provider: AWS (p5.48xlarge)
+    gpu: H100 SXM 80GB
+    hardware: h100
+    usd_per_gpu_hour: 6.88
+    kind: on-demand
+    verified: true
+    source_url: "https://www.thundercompute.com/blog/nvidia-h100-pricing"
+    retrieved: "2026-09-13"
+    notes: "us-east-1.  research/04 §B.2: hyperscalers carry a 3-5x premium for identical silicon."
+
+  # -- H800 SXM 80GB (DeepSeek's assumed rate; there is no public H800 rental market) ---
+  - id: h800_assumed_deepseek
+    provider: "(rate assumed by DeepSeek for its own cost disclosure)"
+    gpu: H800 SXM 80GB
+    hardware: h800
+    usd_per_gpu_hour: 2.00
+    kind: on-demand
+    kind_inferred: true
+    verified: true
+    source_url: "https://arxiv.org/pdf/2412.19437"
+    retrieved: "2026-09-13"
+    notes: >-
+      NOT a market quote.  This is the $2/H800-hour DeepSeek assumed when it converted 2.788M
+      H800-hours into the headline $5.576M figure for DeepSeek-V3 (research/04 §B.1 Tier 3).
+      research/04 §B.2 lists no H800 rental price from any provider -- the H800 is an
+      export-restricted part with no public rental market -- so this row exists only so the
+      DeepSeek-V3 calibration row can be costed in its own currency.  There is deliberately no
+      H800 *spot* row, so that column renders as "no number exists".
+
+  # -- H200 141GB --------------------------------------------------------------------
+  - id: h200_spot_prime_intellect
+    provider: Prime Intellect
+    gpu: H200 141GB
+    hardware: h200
+    usd_per_gpu_hour: 1.99
+    kind: spot
+    kind_inferred: true
+    verified: true
+    source_url: "https://primeintellect.ai"
+    retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.2 lists this in the "Cheapest" column without labelling spot vs on-demand.
+      Recorded as spot by analogy with Prime Intellect's H100 tiers ($0.94 spot / $2.43
+      on-demand).  Flagged as an inference, not a quoted label.
+
+  - id: h200_spot_nebius_preemptible
+    provider: Nebius
+    gpu: H200 141GB
+    hardware: h200
+    usd_per_gpu_hour: 2.45
+    kind: spot
+    verified: true
+    source_url: "https://nebius.com/prices"
+    retrieved: "2026-09-13"
+
+  - id: h200_spot_coreweave
+    provider: CoreWeave
+    gpu: H200 141GB
+    hardware: h200
+    usd_per_gpu_hour: 2.62
+    kind: spot
+    verified: true
+    source_url: "https://www.coreweave.com/pricing"
+    retrieved: "2026-09-13"
+
+  - id: h200_ondemand_nebius
+    provider: Nebius
+    gpu: H200 141GB
+    hardware: h200
+    usd_per_gpu_hour: 4.50
+    kind: on-demand
+    verified: true
+    source_url: "https://nebius.com/prices"
+    retrieved: "2026-09-13"
+
+  # -- B200 192GB --------------------------------------------------------------------
+  - id: b200_spot_prime_intellect
+    provider: Prime Intellect
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 3.49
+    kind: spot
+    kind_inferred: true
+    verified: true
+    source_url: "https://primeintellect.ai"
+    retrieved: "2026-09-13"
+    notes: >-
+      This is the single B200 price research/04 §B.5 uses for the whole ladder ("B200 $3.49").
+      §B.2 lists it in the "Cheapest" column without a spot/on-demand label; recorded as spot by
+      analogy with Prime Intellect's H100 tiers.  Flagged as an inference.
+
+  - id: b200_spot_nebius_preemptible
+    provider: Nebius
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 3.95
+    kind: spot
+    verified: true
+    source_url: "https://nebius.com/prices"
+    retrieved: "2026-09-13"
+    notes: "Labelled 'preempt' in research/04 §B.2."
+
+  - id: b200_spot_coreweave
+    provider: CoreWeave
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 4.26
+    kind: spot
+    verified: true
+    source_url: "https://www.coreweave.com/pricing"
+    retrieved: "2026-09-13"
+
+  - id: b200_spot_gcp
+    provider: Google Cloud
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 4.95
+    kind: spot
+    verified: true
+    source_url: "https://www.thundercompute.com/blog/nvidia-b200-pricing"
+    retrieved: "2026-09-13"
+
+  - id: b200_ondemand_lambda
+    provider: Lambda
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 6.69
+    kind: on-demand
+    kind_inferred: true
+    verified: true
+    source_url: "https://lambda.ai/pricing"
+    retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.2's B200 row labels only the discounted entries ("preempt", "spot"); the
+      remainder of the "Then" column is read as on-demand.  Flagged as an inference.
+
+  - id: b200_ondemand_coreweave
+    provider: CoreWeave
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 8.60
+    kind: on-demand
+    kind_inferred: true
+    verified: true
+    source_url: "https://www.coreweave.com/pricing"
+    retrieved: "2026-09-13"
+    notes: "Read as on-demand by contrast with CoreWeave's own explicitly-labelled B200 spot row."
+
+  - id: b200_ondemand_aws
+    provider: AWS
+    gpu: B200 192GB
+    hardware: b200
+    usd_per_gpu_hour: 14.24
+    kind: on-demand
+    verified: true
+    source_url: "https://www.thundercompute.com/blog/nvidia-b200-pricing"
+    retrieved: "2026-09-13"
+    notes: "Hyperscaler column in research/04 §B.2."
+
+  # -- B300 288GB --------------------------------------------------------------------
+  - id: b300_spot_prime_intellect
+    provider: Prime Intellect
+    gpu: B300 288GB
+    hardware: b300
+    usd_per_gpu_hour: 4.99
+    kind: spot
+    kind_inferred: true
+    verified: true
+    source_url: "https://primeintellect.ai"
+    retrieved: "2026-09-13"
+    notes: "Cheapest-column entry, unlabelled in research/04 §B.2; inferred as above."
+
+  - id: b300_ondemand_runpod_secure
+    provider: RunPod (Secure)
+    gpu: B300 288GB
+    hardware: b300
+    usd_per_gpu_hour: 7.89
+    kind: on-demand
+    kind_inferred: true
+    verified: true
+    source_url: "https://www.runpod.io/pricing"
+    retrieved: "2026-09-13"
+
+  # -- GB200 NVL72 -------------------------------------------------------------------
+  - id: gb200_ondemand_coreweave
+    provider: CoreWeave
+    gpu: GB200 NVL72 (per GPU)
+    hardware: gb200
+    usd_per_gpu_hour: 10.50
+    kind: on-demand
+    kind_inferred: true
+    verified: true
+    source_url: "https://www.coreweave.com/pricing"
+    retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.2: "the only public per-GPU rate found" for GB200.  Nebius/Together/Lambda
+      are contact-sales.  GB300 has no public pricing anywhere.  NVIDIA Rubin / VR200 is not
+      rentable at any published price -- research/04 §B.2: "Do not plan around it."
+
+  # -- AMD ---------------------------------------------------------------------------
+  - id: mi300x_spot_azure
+    provider: Microsoft Azure
+    gpu: MI300X 192GB
+    hardware: mi300x
+    usd_per_gpu_hour: 1.11
+    kind: spot
+    verified: true
+    source_url: "https://www.thundercompute.com/blog/amd-mi300x-pricing"
+    retrieved: "2026-09-13"
+
+  - id: mi300x_spot_vultr_preemptible
+    provider: Vultr
+    gpu: MI300X 192GB
+    hardware: mi300x
+    usd_per_gpu_hour: 1.85
+    kind: spot
+    verified: true
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+
+  - id: mi300x_ondemand_runpod
+    provider: RunPod
+    gpu: MI300X 192GB
+    hardware: mi300x
+    usd_per_gpu_hour: 2.39
+    kind: on-demand
+    verified: true
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+    notes: "research/04 §B.2: best self-serve on-demand MI300X rate."
+
+  - id: mi355x_reserved_vultr_36mo
+    provider: Vultr
+    gpu: MI355X 288GB
+    hardware: mi355x
+    usd_per_gpu_hour: 2.29
+    kind: reserved
+    verified: true
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+    notes: "36-month reservation."
+
+  - id: mi355x_spot_vultr_preemptible
+    provider: Vultr
+    gpu: MI355X 288GB
+    hardware: mi355x
+    usd_per_gpu_hour: 2.59
+    kind: spot
+    verified: true
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+
+  - id: mi355x_ondemand_oracle
+    provider: Oracle Cloud (BM.GPU.MI355X.8)
+    gpu: MI355X 288GB
+    hardware: mi355x
+    usd_per_gpu_hour: 8.60
+    kind: on-demand
+    verified: true
+    source_url: "https://www.spheron.network/blog/amd-mi300x-mi355x-pricing-2026"
+    retrieved: "2026-09-13"
+    notes: >-
+      research/04 §B.2: "the only verified true on-demand rate" for MI355X ($68.80/node of 8).
+      TensorWave's $2.95 is a "starting at" quote and is not recorded here as a rate.
+
+  # -- Google TPU (first-party, per chip-hour) ----------------------------------------
+  - id: tpu_v5e_ondemand
+    provider: Google Cloud (us-central1 / us-east5)
+    gpu: TPU v5e
+    hardware: tpu_v5e
+    usd_per_gpu_hour: 1.20
+    kind: on-demand
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+
+  - id: tpu_v5e_flex_start
+    provider: Google Cloud (us-central1 / us-east5)
+    gpu: TPU v5e
+    hardware: tpu_v5e
+    usd_per_gpu_hour: 0.60
+    kind: flex-start
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+    notes: >-
+      DWS Flex-start = exactly 50% of on-demand.  research/04 §B.3: Google no longer publishes a
+      spot rate in the table, so flex-start is the published discount path -- it is NOT a spot
+      price and is recorded under its own kind.
+
+  - id: tpu_v5e_reserved_3yr
+    provider: Google Cloud (us-central1 / us-east5)
+    gpu: TPU v5e
+    hardware: tpu_v5e
+    usd_per_gpu_hour: 0.54
+    kind: reserved
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+    notes: "3-year commitment. 1-year is $0.84."
+
+  - id: tpu_v6e_ondemand
+    provider: Google Cloud (us-east1 / us-east5)
+    gpu: TPU v6e "Trillium"
+    hardware: tpu_v6e
+    usd_per_gpu_hour: 2.70
+    kind: on-demand
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+
+  - id: tpu_v6e_flex_start
+    provider: Google Cloud (us-east1 / us-east5)
+    gpu: TPU v6e "Trillium"
+    hardware: tpu_v6e
+    usd_per_gpu_hour: 1.35
+    kind: flex-start
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+    notes: "research/04 §B.3: 'Trillium at $1.35 flex-start is the best perf/$ tier.'"
+
+  - id: tpu_v6e_reserved_3yr
+    provider: Google Cloud (us-east1 / us-east5)
+    gpu: TPU v6e "Trillium"
+    hardware: tpu_v6e
+    usd_per_gpu_hour: 1.22
+    kind: reserved
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+    notes: "3-year commitment. 1-year is $1.89."
+
+  - id: tpu_v7_ondemand
+    provider: Google Cloud (us-central1)
+    gpu: TPU v7 "Ironwood"
+    hardware: tpu_v7
+    usd_per_gpu_hour: 12.00
+    kind: on-demand
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+    notes: "research/04 §B.3: Ironwood (v7) is GA and publicly priced as of Sept 2026 -- that is new."
+
+  - id: tpu_v7_flex_start
+    provider: Google Cloud (us-central1)
+    gpu: TPU v7 "Ironwood"
+    hardware: tpu_v7
+    usd_per_gpu_hour: 6.00
+    kind: flex-start
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+
+  - id: tpu_v7_reserved_3yr
+    provider: Google Cloud (us-central1)
+    gpu: TPU v7 "Ironwood"
+    hardware: tpu_v7
+    usd_per_gpu_hour: 5.40
+    kind: reserved
+    verified: true
+    source_url: "https://cloud.google.com/tpu/pricing"
+    retrieved: "2026-09-13"
+    notes: "3-year commitment. 1-year is $8.40."
+
+  # -- Hardware we already own --------------------------------------------------------
+  - id: mac_m4_owned
+    provider: "(owned hardware -- Sammy's Mac Mini M4)"
+    gpu: Apple M4 10-core GPU
+    hardware: mac_m4_10core
+    usd_per_gpu_hour: 0.0
+    kind: owned
+    verified: true
+    source: "Hardware already owned; marginal rental cost is $0. Electricity is not modelled."
+    source_url: null
+    measured: true
+    retrieved: "2026-09-13"
+    notes: >-
+      $0 is the *marginal* cost of Rung 0, which is the point of Rung 0.  It is not a claim that
+      the machine was free.  research/04 §B.4 is the catalogue of genuinely free alternatives
+      (Kaggle 30 GPU-h/week, Modal's $30/mo, TPU Research Cloud, Prime Intellect grants,
+      the Digital Research Alliance clusters via a McMaster sponsor).

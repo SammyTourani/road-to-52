@@ -1,0 +1,1270 @@
+# Copyright 2026 The road-to-52 authors.
+# SPDX-License-Identifier: Apache-2.0
+#
+# THE BAR -- published benchmark scores, with the conditions that make them mean anything.
+#
+# HONEST-NUMBERS RULE (docs/ARCHITECTURE.md §1.3).  Every score entry carries:
+#   benchmark, value, unit, source_url, retrieved, conditions, verified
+# `conditions` is the part that actually matters.  research/01 §0: "Every headline number in
+# this report is a *model + harness + effort level + grader* tuple.  Treat single numbers as
+# meaningless without that tuple."  Where no number exists, THE ENTRY IS OMITTED -- gap.py
+# renders an em dash.  Never a zero, never an invention.
+#
+# `verified: false` carries a flag research/01 or research/04 raised, not our own doubt.
+#
+# Compiled from research/01-benchmarks-and-bar.md (the benchmark set, Fable 5.1's published
+# numbers, the open-weight head-to-head, the saturation scorecard), research/02 (nanochat and
+# modded-nanogpt leaderboards) and research/04 (the landscape).  All retrieved 2026-09-13.
+
+meta:
+  retrieved: "2026-09-13"
+  target_model: claude-fable-5-1
+  compiled_from:
+    - "research/01-benchmarks-and-bar.md §1.2, §1.4 (the benchmark set), §2.1-§2.5 (Fable 5.1), §3.1-§3.2 (open weights), §4.1 (local), §7 (saturation)"
+    - "research/02-open-training-stack.md (nanochat dev/LEADERBOARD.md, modded-nanogpt records)"
+    - "research/04-landscape-and-compute.md §0, §A.1, §A.3 (the landscape)"
+  health_warning: >-
+    Three standing warnings from research/01 §6.  (1) The harness is worth more than the model:
+    flipping two API settings took GPT-5.6 Sol from 13.3% to 38.3% on ARC-AGI-3, same model.
+    (2) Anthropic evaluates with production safeguards ON, scoring zero where a classifier fires,
+    while comparison models run with them off -- published Claude scores understate raw
+    capability.  (3) Composite indices refit globally and are not comparable across versions:
+    Artificial Analysis moved Fable 5.1 through 65.7 -> 57 -> 53 in two weeks for the same model.
+
+# =======================================================================================
+# BENCHMARKS
+# =======================================================================================
+benchmarks:
+
+  # ---- The 2026 consensus set (research/01 §1.4) -------------------------------------
+
+  - id: terminal-bench-4
+    name: Terminal-Bench 4.0
+    measures: 66 containerised terminal tasks; sci-adjacent and frontier engineering
+    url: "https://www.tbench.ai/leaderboard"
+    harness: "Harbor. 8 saturated tasks removed, 20 revised, uniform 8h timeout."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    consensus_rank: "1 of 9 launches report it -- the single most-reported benchmark of 2026"
+    notes: >-
+      NEVER compare across Terminal-Bench versions (research/01 §4.3): 1.0 (May 2025, 80 tasks)
+      -> 2.0 (Nov 2025, 89) -> 2.1 (May 2026, 89) -> 3.0 (Jul 2026, 74, formerly FrontierBench)
+      -> 4.0 (Aug 2026, 66).  The same model scored 83.3% on 2.1 and 15.7% on 3.0.  Local runs
+      are only partly feasible: the dataset includes GPU and multi-container tasks and
+      recommends Modal or Daytona.
+
+  - id: terminal-bench-2-1
+    name: Terminal-Bench 2.1
+    measures: 89 containerised terminal tasks (28 fixed vs 2.0)
+    url: "https://www.vals.ai/benchmarks/terminal-bench"
+    harness: "Vals AI's single fixed harness for the third-party column; vendor harnesses otherwise."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Kept only because it is the one benchmark where an open model's ranking *inverts* between
+      harnesses: DeepSeek V4.1-Flash self-reports 90.6% (beating every closed model) but scores
+      74.53% on the Vals harness, where Fable 5.1 gets 85.02%.  research/01 §6.1.  Not comparable
+      to Terminal-Bench 4.0.
+
+  - id: terminal-bench-science-0-1
+    name: Terminal-Bench-Science 0.1
+    measures: 70 real scientific-research workflows with hidden per-task tests
+    url: "https://www.vals.ai/benchmarks/terminal-bench-science"
+    harness: "Stanford-led community benchmark; lab-run or Vals AI's fixed harness."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      The widest lab-vs-third-party disagreement in the whole dataset: Anthropic self-reports
+      52.6% for Fable 5.1, Vals AI measures 34.29% on one fixed harness (research/01 §6.1).
+      Both numbers are recorded below.
+
+  - id: swe-bench-pro
+    name: SWE-bench Pro
+    measures: harder multi-file diffs on live repos, less leakage than SWE-bench Verified
+    url: "https://arxiv.org/abs/2509.16941"
+    harness: "Scale AI / Princeton. Anthropic reports avg of 5 trials."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Scale's public->private split shows a ~10-point drop across the board.  Neither the public
+      nor the private Scale board has a Fable 5.1, Opus 5 or GPT-6 Astra entry yet; the numbers
+      here are lab-reported.
+
+  - id: swe-bench-multilingual
+    name: SWE-bench Multilingual
+    measures: 300 problems across 9 languages
+    url: "https://www.swebench.com/"
+    harness: "Princeton"
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: "Approaching saturation at ~89%."
+
+  - id: swe-bench-multimodal
+    name: SWE-bench Multimodal
+    measures: GitHub issues with screenshots / mockups attached
+    url: "https://arxiv.org/abs/2410.03859"
+    harness: "Princeton; Anthropic used an internal harness."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: swe-bench-verified
+    name: SWE-bench Verified
+    measures: 500 human-verified GitHub issues, Python
+    url: "https://www.swebench.com/"
+    harness: "Princeton/Stanford official board -- newest entry 2026-02-26, no H2-2026 model."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: false
+    notes: >-
+      DEAD AND CONTAMINATED.  OpenAI formally deprecated it in Feb 2026: an audit of 138 problems
+      o3 failed found 59.4% contained material test-design or problem-statement defects, and
+      contamination was confirmed across multiple providers.  "This is why we have stopped
+      reporting SWE-bench Verified scores, and we recommend that other model developers do so
+      too."  METR found ~half of test-passing SWE-bench Verified PRs would be rejected by
+      maintainers.  THERE IS NO FABLE 5.1 NUMBER: the 212-page system card mentions it zero
+      times, and every third-party site quoting "Fable 5.1 = 95%" is recycling Fable 5's June
+      figure (research/01 §2.5, §6.2).  Listed here so that absence is visible, not to be used.
+
+  - id: deepswe-v1-1
+    name: DeepSWE v1.1
+    measures: 113 long-horizon SWE tasks written from scratch to avoid contamination
+    url: "https://openai.com/index/gpt-6-astra"
+    harness: "Anthropic: avg of 5 trials. 8 of 9 2026 launches report it (all but Anthropic's own headline table)."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: frontiercode-1-1-extended
+    name: FrontierCode 1.1 Extended
+    measures: 150 tasks from real PRs; blocking unit tests plus a weighted code-quality rubric
+    url: "https://openai.com/index/gpt-6-astra"
+    harness: "Cognition."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Fable 5.1's score PEAKS AT MEDIUM EFFORT and falls at high/xhigh/max, because the rubric
+      penalises any out-of-scope edit -- even a correct one.  OpenAI exploited exactly this gap
+      by instructing Astra to "avoid unrelated cleanup".  Effort level is load-bearing here in a
+      way it is nowhere else (research/01 §2.2).
+
+  - id: frontiercode-1-1-main
+    name: FrontierCode 1.1 Main
+    measures: as Extended, main split
+    url: "https://openai.com/index/gpt-6-astra"
+    harness: "Cognition."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: frontierswe-v2
+    name: FrontierSWE v2
+    measures: 34 ultra-long-horizon SWE tasks; strong models work ~20 hours each
+    url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf"
+    harness: "Proximal's harness, max effort, 5 trials."
+    category: frontier-2026
+    unit: score
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: hle-no-tools
+    name: Humanity's Last Exam (no tools)
+    measures: 2,500 expert-written questions, multimodal
+    url: "https://arxiv.org/abs/2501.14249"
+    harness: "CAIS + Scale AI. Default judge is o3-mini."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      2,500 public questions are downloadable, but the default judge is o3-mini; a local judge
+      works mechanically and produces numbers that are NOT leaderboard-comparable
+      (research/01 §4.1).
+
+  - id: hle-with-tools
+    name: Humanity's Last Exam (with tools)
+    measures: as above, tool use permitted
+    url: "https://arxiv.org/abs/2501.14249"
+    harness: "CAIS + Scale AI."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: automationbench
+    name: AutomationBench
+    measures: Zapier's private held-out business-workflow set, 47 apps, deterministic assertions
+    url: "https://arxiv.org/abs/2604.18934"
+    harness: "Zapier, private held-out set. Anthropic ran it with safety classifiers ON."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      One of the two benchmarks where Fable 5.1 scored ZERO on any task a classifier fired on
+      (the other is OSWorld 2.0).  Anthropic: "This likely reduces the performance of Fable 5.1."
+      Open-weight vendor numbers (DeepSeek 54.8, GLM 48.2) come from different harnesses than
+      Anthropic's 31.4 -- the apparent open win is not apples-to-apples.
+
+  - id: gdpval-aa-v2
+    name: GDPval-AA v2
+    measures: 220 tasks across 44 occupations; Elo from blind pairwise comparison
+    url: "https://arxiv.org/abs/2510.04374"
+    harness: "Dataset from OpenAI's GDPval gold DB; harness and Elo by Artificial Analysis."
+    category: frontier-2026
+    unit: Elo
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Elo is recalibrated as models are added, which is why Anthropic's run (1853) and AA's
+      published run (1764) differ by ~90 points for the same model.  Both are recorded.
+
+  - id: aa-briefcase
+    name: AA-Briefcase
+    measures: multi-week knowledge-work projects over thousands of source files; rubric + pairwise panel
+    url: "https://artificialanalysis.ai/methodology/intelligence-benchmarking"
+    harness: "Artificial Analysis."
+    category: frontier-2026
+    unit: Elo
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: osworld-2-partial
+    name: OSWorld 2.0 (partial credit)
+    measures: 108 long-horizon computer-use tasks on a live Ubuntu VM, weighted checkpoints
+    url: "https://osworld-v2.xlang.ai/"
+    harness: "XLANG Lab. DISPUTED task set -- see notes."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Anthropic ran the authors' Aug-2026 release PLUS its own task and grading fixes, and says
+      it explicitly supersedes and is not comparable to the Opus 5 card's figures.  OpenAI's
+      footnote 3: "the scores for Claude use the official settings, and not the modified tasks
+      and modified grading from the Fable 5.1 System Card" -- hence Opus 5 at 75.4 (Anthropic)
+      vs 70.2 (OpenAI).  Not locally runnable at all: full desktop VMs, x86 images, and macOS
+      hosts cannot do KVM.
+
+  - id: osworld-2-strict
+    name: OSWorld 2.0 (strict / binary)
+    measures: as above, all-checkpoints-pass scoring
+    url: "https://osworld-v2.xlang.ai/"
+    harness: "XLANG Lab; Opus 4.8 grader, Pass@1 over 5 runs."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: "research/01 §7 lists this as the benchmark with the most real headroom: a 31.4% binary ceiling."
+
+  - id: arc-agi-1
+    name: ARC-AGI-1
+    measures: fluid intelligence, few-shot grid induction
+    url: "https://arcprize.org/leaderboard"
+    harness: "ARC Prize Foundation, semi-private set, independently verified."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: >-
+      SATURATED: 98.5% is above the 98.0% human panel.  The public training/eval JSON (Apache-2.0,
+      ~5 MB, exact grid match) is one of the eight easiest things to run on a 16 GB Mac
+      (research/01 §4.1) -- but the leaderboard numbers come from the semi-private set, so a
+      local run is not comparable to them.
+
+  - id: arc-agi-2
+    name: ARC-AGI-2
+    measures: harder ARC -- composition and novelty
+    url: "https://arcprize.org/leaderboard"
+    harness: "ARC Prize, semi-private set, 2 attempts per test input."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: >-
+      The widest open-vs-closed gap on any benchmark (~29 points).  Also the clearest
+      cost-efficiency inversion: DeepSeek V4 Flash scores 61.4% at $0.042/task against Fable
+      5.1's 90.0% at $4.49/task -- ~100x cheaper for two-thirds the score.  No open-weight vendor
+      has self-published an ARC-AGI-2 score; every open number here is ARC Prize's own run.
+      1,000 public training + 120 public eval tasks are downloadable and locally runnable.
+
+  - id: arc-agi-3
+    name: ARC-AGI-3
+    measures: interactive turn-based games with no instructions; scored by RHAE vs a human baseline
+    url: "https://arcprize.org/leaderboard"
+    harness: "CONTESTED -- provider-adapter vs standard provider-agnostic harness differ by ~37 points."
+    category: frontier-2026
+    unit: "% RHAE"
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: >-
+      THE canonical harness-beats-model exhibit (research/01 §6.1).  GPT-6 Astra: 99.9% on
+      OpenAI's Provider Adapter harness ($18.8k) vs 62.7% on the standard provider-agnostic
+      harness ($26.1k).  GPT-5.6 Sol: 13.3% on the official harness vs 38.3% with retained
+      reasoning + compaction -- 3x the score with 6x fewer output tokens, same model, two API
+      settings.  Fable 5.1 has NO score: "not available at the time of release".
+
+  - id: agents-last-exam
+    name: Agents' Last Exam
+    measures: complex professional tasks inside real software
+    url: "https://openai.com/index/gpt-6-astra"
+    harness: "OpenAI. Needs Linux AND Windows VMs via cua-bench to run locally."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: mcp-atlas
+    name: MCP-Atlas
+    measures: 1,000 tasks (500 public / 500 held out), 36 real MCP servers, 220 tools
+    url: "https://arxiv.org/abs/2602.00933"
+    harness: "Scale Labs. LLM judge (default Gemini, overridable)."
+    category: frontier-2026
+    unit: score
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Near-saturated -- 10 models within 8.9 points.  Muse Spark 1.1 leads at 88.10, in the same
+      rank-1 tier as Fable 5.1's 87.20.  Anthropic reported it for Opus 5 (85.8) but DROPPED it
+      from the Fable 5.1 card.  20 of the 36 MCP servers need no credentials, so a partial
+      public run is realistic with ~8-10 GB of Docker.
+
+  - id: toolathlon-verified
+    name: Toolathlon Verified
+    measures: 108 tasks, 600+ tools, 32 apps, execution-checked
+    url: "https://kingy.ai/blog/claude-fable-5-1-benchmarks-price-mythos-access"
+    harness: "Toolathlon authors (Jun 2026 verified release), 3 trials."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Anthropic ran Fable 5.1 WITH classifiers and a fallback model ON while every comparator ran
+      with them OFF.  11 of 324 Fable 5.1 trials hit a safety refusal and were partly completed by
+      a fallback model; 4 more terminated and counted as failures.  This row measures a shipped
+      system, not raw capability -- and Fable 5.1 is only #3 on it.
+
+  - id: healthbench-professional
+    name: HealthBench Professional (length-adjusted)
+    measures: 525 physician-authored clinical conversations
+    url: "https://arxiv.org/abs/2604.27470"
+    harness: "OpenAI dataset; Anthropic grades with Opus 4.8, OpenAI re-graded with GPT-5.4."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      A cross-lab disagreement of 4.0 points on the same model: Anthropic 62.1, OpenAI 58.1,
+      because OpenAI re-ran all Claude models with GPT-5.4 grading, unclipped, with an Opus 5
+      fallback (research/01 §6.3).
+
+  - id: benchcad
+    name: BenchCAD Vision2Code
+    measures: programmatic CAD (CadQuery) from multi-view renders, scored by voxel IoU
+    url: "https://arxiv.org/abs/2605.10865"
+    harness: "1,000-file subset of 17,900. Anthropic made 3 documented modifications to the reference implementation."
+    category: frontier-2026
+    unit: "voxel IoU x100"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: "OpenAI flags Anthropic's three eval modifications when quoting Claude's scores (footnote 5)."
+
+  - id: frontiermath-tier-4
+    name: FrontierMath Tier 4 (v2)
+    measures: 43 research-level mathematics problems, private set
+    url: "https://epoch.ai/frontiermath"
+    harness: "Epoch AI (OpenAI-funded; OpenAI has exclusive access to a subset). v2 of 2026-06-12 fixed errors in 42% of problems."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: false
+    notes: >-
+      Now saturated at 97.6%.  Note the inversion: Fable 5 (90.2) beats Fable 5.1 (87.8).
+      Only 12 of 338 FrontierMath problems are public; everything else is private to Epoch, so
+      this cannot be run locally at all.
+
+  - id: browsecomp
+    name: BrowseComp
+    measures: hard-to-find web facts
+    url: "https://openai.com/index/gpt-6-astra"
+    harness: "OpenAI. Requires live web search."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: false
+    notes: >-
+      Retiring, and near-saturated at ~91.5%.  NO FABLE 5.1 NUMBER EXISTS from either lab.
+      Kimi K3 at 91.2 puts open weights essentially level with the frontier here.
+
+  - id: livebench-overall
+    name: LiveBench (overall)
+    measures: contamination-free rotating benchmark, 23 objective tasks across 7 categories
+    url: "https://livebench.ai/"
+    harness: "NO LLM JUDGE IN ANY SUBTASK. Refreshed every 6 months. --api-base points at a local server."
+    category: frontier-2026
+    unit: score
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: >-
+      Dropped by all nine 2026 frontier launches, but methodologically one of the cleanest boards
+      in existence precisely because it uses no LLM judge -- which is what makes the open-weight
+      result on the agentic-coding column credible.
+
+  - id: livebench-agentic-coding
+    name: LiveBench -- Agentic Coding
+    measures: the agentic-coding column of LiveBench
+    url: "https://livebench.ai/"
+    harness: "As LiveBench. No LLM judge."
+    category: frontier-2026
+    unit: score
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: >-
+      THE headline open-weight win of 2026: DeepSeek V4.1-Flash leads outright at 77.3 against
+      Claude Fable 5.1's 66.1 -- 11.2 points clear of the #1 overall model, at $0.029/task vs
+      $1.212 (~40x cheaper).  The first time an open-weight model has led a frontier column
+      outright, and it is on the board that uses no LLM judge.  Released 10 Sep 2026, so too new
+      for independent replication.
+
+  - id: vending-bench-2
+    name: Vending-Bench 2
+    measures: run a vending business for 365 simulated days from $500; scored on final balance
+    url: "https://andonlabs.com/evals/vending-bench-2"
+    harness: "Andon Labs. No public repo; 60-100M output tokens per run."
+    category: frontier-2026
+    unit: USD
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Real headroom: a competent human is estimated at ~$63k, roughly 4x the best model.
+      Fable 5.1 is charted but not in the top 10, so no value is recorded for it.
+
+  - id: aa-index-v4-3
+    name: Artificial Analysis Intelligence Index v4.3
+    measures: 10-benchmark composite (Agents 30% / Coding 20% / General 30% / Scientific Reasoning 20%)
+    url: "https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-3"
+    harness: "Artificial Analysis, published 2026-09-07. Private-test-set weighting raised 40%->45%."
+    category: frontier-2026
+    unit: index
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      VERSION-LOCKED.  The same two models scored 65.7/61.2 on v4.1.1 (6 Aug), 57/55 on v4.2
+      (4 Sep) and 53/53 on v4.3 (7 Sep).  Never compare across versions; always quote the version
+      string and date (research/01 §6.6).
+
+  - id: eci
+    name: Epoch Capabilities Index (ECI)
+    measures: IRT fit over 50+ benchmarks
+    url: "https://epoch.ai/data/eci_scores.csv"
+    harness: "Epoch AI. Refits globally as models are added, so values drift between publications."
+    category: frontier-2026
+    unit: index
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: >-
+      Epoch reported Astra at 169 on 3 Sep and 166.6 in the 13 Sep CSV -- same model, global
+      refit.  ~5 ECI is about one doubling of METR time horizon, which is how research/01 §3.2
+      converts the 6.6-point open-vs-closed gap into "4.5-6 months behind".
+
+  - id: arena-agent-arena
+    name: Arena Agent Arena (net improvement)
+    measures: causal per-signal scoring over 1.59M real agent sessions
+    url: "https://arena.ai/leaderboard/agent"
+    harness: "arena.ai, 9 Sep 2026."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+    notes: "Cost-normalised, the gap narrows sharply: Kimi K3 at $0.80/task vs Fable 5.1 at $4.50/task."
+
+  - id: programbench
+    name: ProgramBench
+    measures: rebuild a codebase from a compiled binary plus docs; 247k behavioural tests
+    url: "https://arxiv.org/abs/2605.03546"
+    harness: "166 'golden' tasks of 200, mini-swe-agent harness, no 6h limit."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: false
+
+  - id: simpleqa-verified
+    name: SimpleQA Verified
+    measures: short-fact hallucination
+    url: "https://epoch.ai/data/benchmarks.csv"
+    harness: "Epoch AI runs it. 1,000 rows, MIT, ungated -- but needs an autorater."
+    category: frontier-2026
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: "Largely displaced at the frontier by AA-Omniscience."
+
+  - id: scale-fortress
+    name: Scale Fortress
+    measures: dual-use safeguard behaviour (refusal on harmful dual-use requests)
+    url: "https://labs.scale.com/leaderboard"
+    harness: "Scale Labs."
+    category: frontier-2026
+    unit: score
+    higher_is_better: false
+    saturated: false
+    local_runnable: false
+    notes: >-
+      LOWER IS BETTER.  The one board an open-weight model wins outright against every closed
+      frontier model: gpt-oss-120b at 8.24 +/- 1.93, Apache-2.0.  It measures refusal and
+      safeguard behaviour, not capability -- but it is a genuine #1.
+
+  # ---- The classic local set ---------------------------------------------------------
+  # research/01 §1.4: "not one of the nine September-wave launch posts reports SWE-bench
+  # Verified, MMLU, MMLU-Pro, AIME, LiveCodeBench, HumanEval or MATH-500."  These benchmarks
+  # are DEAD AT THE FRONTIER.  They are in this file anyway, because they are how a 124M model
+  # trained on a Mac Mini actually gets measured -- and because a GPT-2-small-class model is
+  # nowhere near saturating any of them.
+
+  - id: hellaswag
+    name: HellaSwag
+    measures: commonsense sentence completion, 10,042 validation examples
+    url: "https://github.com/karpathy/llm.c"
+    harness: "Loglikelihood of each ending conditioned on the context; GPT-2 tokenizer; accuracy and length-normalised acc_norm. Same protocol as llm.c's hellaswag.py / lm-eval."
+    category: classic-local
+    unit: "% acc_norm"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: >-
+      DEAD AT THE FRONTIER -- not reported by any 2026 launch.  Alive here: it is one of the
+      three acceptance criteria for Rung 0 (docs/ARCHITECTURE.md §10, HellaSwag >= 29.4%), and
+      r52/eval/hellaswag.py implements it in pure MLX.
+
+  - id: arc-challenge
+    name: ARC-Challenge
+    measures: grade-school science multiple choice, challenge split
+    url: "https://github.com/EleutherAI/lm-evaluation-harness"
+    harness: "lm-evaluation-harness, loglikelihood multiple choice; acc and acc_norm."
+    category: classic-local
+    unit: "% acc_norm"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: >-
+      DEAD AT THE FRONTIER.  Present because it is a standard small-model reporting row and is
+      one install away via lm-evaluation-harness.  No frontier lab publishes it any more, so
+      every frontier cell here is an em dash -- which is the honest state of the world, not a
+      gap in this file.
+
+  - id: mmlu-pro
+    name: MMLU-Pro
+    measures: 12k harder MMLU multiple-choice questions, 10 options each
+    url: "https://github.com/TIGER-AI-Lab/MMLU-Pro"
+    harness: "Apache-2.0; regex + exact match; evaluate_from_api.py points straight at Ollama."
+    category: classic-local
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: >-
+      DEAD AT THE FRONTIER: 0 of 9 September-2026 launches report it, and it appears in the Fable
+      5.1 system card only as substrate for an alignment experiment, never as a capability claim.
+      research/01 §1.2: "Not reported at the frontier."  No frontier scores exist to record.
+
+  - id: gpqa-diamond
+    name: GPQA Diamond
+    measures: ~198 PhD-level biology / chemistry / physics multiple-choice questions
+    url: "https://github.com/idavidrein/gpqa"
+    harness: "MIT licence; exact match on 'ANSWER: X'. Only friction is a free HF gate."
+    category: classic-local
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: >-
+      The last academic multiple-choice benchmark still standing -- 4 of 9 launches report it
+      (OpenAI and the Chinese open-weight labs; Anthropic, Google, Meta and SpaceXAI have all
+      dropped it).  SATURATED at 92.6-96.0%, and it is where open weights have already caught
+      the frontier: Kimi K3 93.5 vs Fable 5.1 93.7 is a statistical tie.  CONFLICT FLAGGED:
+      research/04 §0 quotes 92.6% for Fable 5.1 citing DataScienceDojo, but OpenAI's own table
+      (research/01 §2.3) gives Fable 5.1 93.7 and Fable 5 92.6 -- i.e. the secondary aggregator
+      has attributed Fable 5's score to Fable 5.1, exactly the failure mode research/01 §6.7
+      documents.  This file uses 93.7 for Fable 5.1 and 92.6 for Fable 5.
+
+  - id: gsm8k
+    name: GSM8K
+    measures: grade-school math word problems, 8.5k problems
+    url: "https://github.com/EleutherAI/lm-evaluation-harness"
+    harness: "lm-evaluation-harness; exact match on the final numeric answer."
+    category: classic-local
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: "DEAD AT THE FRONTIER -- 0 of 9 launches. No frontier scores exist to record."
+
+  - id: math-500
+    name: MATH-500
+    measures: 500-problem subset of the MATH competition-mathematics dataset
+    url: "https://github.com/EleutherAI/lm-evaluation-harness"
+    harness: "lm-evaluation-harness; exact match after answer normalisation."
+    category: classic-local
+    unit: "%"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: >-
+      DEAD AT THE FRONTIER -- 0 of 9 launches; research/01 §7 records MATH Level 5 as saturated
+      at 98.1% and abandoned.  No frontier scores exist to record.
+
+  - id: humaneval
+    name: HumanEval
+    measures: 164 hand-written Python programming problems, pass@k against unit tests
+    url: "https://github.com/EleutherAI/lm-evaluation-harness"
+    harness: "Execution-based; pass@1 unless stated."
+    category: classic-local
+    unit: "% pass@1"
+    higher_is_better: true
+    saturated: true
+    local_runnable: true
+    notes: "DEAD AT THE FRONTIER -- 0 of 9 launches. No frontier scores exist to record."
+
+  - id: ifeval
+    name: IFEval
+    measures: verifiable instruction-following constraints
+    url: "https://github.com/EleutherAI/lm-evaluation-harness"
+    harness: "lm-evaluation-harness; programmatic constraint checking, no judge model."
+    category: classic-local
+    unit: "%"
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: >-
+      Not reported by any 2026 frontier launch.  Useful to us because it is judge-free and is the
+      cheapest signal that post-training did anything at all.
+
+  - id: dclm-core
+    name: DCLM CORE
+    measures: 22-task aggregate from DataComp-LM, in nanochat's normalisation
+    url: "https://github.com/karpathy/nanochat/blob/master/dev/LEADERBOARD.md"
+    harness: "nanochat's scripts/base_eval.py + nanochat/core_eval.py (MIT), ported to MLX in r52/eval/core.py."
+    category: classic-local
+    unit: CORE
+    higher_is_better: true
+    saturated: false
+    local_runnable: true
+    notes: >-
+      The single most useful number for a sub-1B model, because nanochat's leaderboard gives a
+      directly comparable reference point: GPT-2 (1.6B) = 0.256525.  The DCLM repo itself is
+      dead (12 months), but the finding and the eval set outlived it.
+
+  - id: fineweb-val-loss
+    name: FineWeb validation loss
+    measures: mean cross-entropy on a fixed FineWeb validation set
+    url: "https://github.com/KellerJordan/modded-nanogpt"
+    harness: "First 10,485,760 tokens of the val shard, non-overlapping windows at the training block_size (modded-nanogpt's protocol). Report bits-per-byte alongside, for tokenizer independence."
+    category: classic-local
+    unit: nats/token
+    higher_is_better: false
+    saturated: false
+    local_runnable: true
+    notes: >-
+      LOWER IS BETTER.  3.28 is the modded-nanogpt speedrun target at 124M parameters and is
+      Rung 0's primary acceptance criterion (docs/ARCHITECTURE.md §10).  Tokenizer-dependent, so
+      only comparable between runs using the same GPT-2 tokenizer and the same val protocol --
+      which is exactly why bits-per-byte is reported next to it.
+
+# =======================================================================================
+# MODELS
+# =======================================================================================
+# Column order in the rendered gap table follows this list.  `weights: open` is what the
+# best-open column searches; `weights: closed` models are excluded from it even when a
+# secondary source calls them open (see qwen3-8-max).
+models:
+
+  # ---- Anthropic --------------------------------------------------------------------
+
+  - id: claude-fable-5-1
+    name: Claude Fable 5.1
+    short: Fable 5.1
+    org: Anthropic
+    weights: closed
+    released: "2026-09-01"
+    status: released
+    notes: >-
+      THE TARGET.  1M context, 128k max output, $10/$50 per MTok, cache reads $0.25/MTok.
+      Adaptive thinking is always on; depth is set by `effort` (low/medium/high/xhigh/max).
+      Knowledge cutoff June 2026.  Claude Mythos 5.1 is the SAME WEIGHTS with fewer safeguards.
+      Every Anthropic-run number below was produced with production safeguards ENABLED, scoring
+      zero where a classifier fired; Anthropic states plainly: "This likely reduces the
+      performance of Fable 5.1."
+    scores:
+      - {benchmark: terminal-bench-4, value: 57.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official tbench.ai board, max effort via Claude Code, SE +/-3.8; third-party. A statistical tie with GPT-6 Astra's 58.2 +/-2.8."}
+      - {benchmark: terminal-bench-4, value: 55.8, unit: "%", verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported; Claude Code --bare, max thinking, 15 trials/task (990 trials), SE +/-1.6-2.0, safeguards on."}
+      - {benchmark: terminal-bench-2-1, value: 85.02, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.vals.ai/models/anthropic_claude-fable-5-1", conditions: "Vals AI fixed harness, pass@1, rank 2. Vals' fallback-adjusted rerun (counting refusal-fallback tasks as failures) drops this to 79.03."}
+      - {benchmark: terminal-bench-science-0-1, value: 52.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported; 10 trials/task (700 trials), SE +/-3.5-4.5, max effort, safeguards on. Strongly bimodal: 2/3 of tasks solved >=80% or <=20% of the time."}
+      - {benchmark: terminal-bench-science-0-1, value: 34.29, unit: "%", verified: true, retrieved: "2026-09-13", source_url: "https://www.vals.ai/benchmarks/terminal-bench-science", conditions: "Vals AI, one fixed harness, pass@1 -- 18.3 points BELOW Anthropic's self-reported figure for the same model. See research/01 §6.1."}
+      - {benchmark: swe-bench-pro, value: 81.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported, System Card Table 8.1.A, avg of 5 trials, max effort, safeguards on."}
+      - {benchmark: swe-bench-multilingual, value: 89.1, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported; 300 problems, 9 languages, avg 5 trials."}
+      - {benchmark: swe-bench-multimodal, value: 54.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported, internal harness, avg 5 trials."}
+      - {benchmark: deepswe-v1-1, value: 67.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported; 113 tasks, avg 5 trials. OpenAI's independent run agrees."}
+      - {benchmark: frontiercode-1-1-extended, value: 63.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported at MEDIUM effort -- the score peaks at medium and falls at high/xhigh/max because the rubric penalises out-of-scope edits. Cognition's harness."}
+      - {benchmark: frontiercode-1-1-main, value: 50.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported at MEDIUM effort (see Extended)."}
+      - {benchmark: frontierswe-v2, value: 0.57, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Proximal's harness; 34 ultra-long tasks (~20h each), max effort, 5 trials. Median task 0.56; outright failure rate 5%."}
+      - {benchmark: hle-no-tools, value: 60.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported, max effort, no tools. AA's own run gives 59%; Scale Labs' gives 46.50 (rank 2, best calibration error at 20)."}
+      - {benchmark: hle-with-tools, value: 65.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported, max effort, tools enabled. OpenAI's independent run agrees and shows Fable 5.1 BEATING Astra (57.2) here."}
+      - {benchmark: automationbench, value: 31.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported at max effort; Zapier's private held-out set; safeguards ON and a classifier firing scores ZERO. AA's own run of the AA variant gives 59%."}
+      - {benchmark: gdpval-aa-v2, value: 1853, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's run at max effort (1835 at xhigh). 220 tasks / 44 occupations, Elo from blind pairwise, harness by Artificial Analysis."}
+      - {benchmark: gdpval-aa-v2, value: 1764, unit: Elo, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/comparisons/gpt-6-astra-vs-claude-fable-5-1", conditions: "Artificial Analysis's own published run -- 89 Elo below Anthropic's, because Elo is recalibrated as models are added."}
+      - {benchmark: aa-briefcase, value: 1694, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's run at max effort (1686 xhigh, 1611 high). Beats Opus 5 on rubric pass and analytical quality but LOSES on presentation (1495 vs 1572). AA's own run: 1662."}
+      - {benchmark: osworld-2-partial, value: 77.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's OWN modified task set and grading, 108 tasks, 1080p, <=500 steps, Opus 4.8 grader, Pass@1 over 5 runs, safeguards on. Explicitly NOT comparable to the Opus 5 card or to OpenAI's official-settings runs."}
+      - {benchmark: osworld-2-strict, value: 41.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "as osworld-2-partial; all-checkpoints-pass scoring."}
+      - {benchmark: arc-agi-1, value: 97.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private set, max effort, independently verified by ARC Prize. $1.40/task."}
+      - {benchmark: arc-agi-2, value: 90.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private set, max effort, verified. $3.12/task -- against DeepSeek V4 Flash's $0.042/task for 61.4%."}
+      - {benchmark: mcp-atlas, value: 87.20, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://labs.scale.com/leaderboard", conditions: "Scale Labs, +/-2.05, rank-1 tier (Muse Spark 1.1 leads at 88.10). Anthropic dropped MCP-Atlas from the Fable 5.1 card."}
+      - {benchmark: toolathlon-verified, value: 77.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://kingy.ai/blog/claude-fable-5-1-benchmarks-price-mythos-access", conditions: "Pass@1 over 3 trials (81.5 Pass@3, 73.1 Pass^3, 23.7 turns). RUN WITH CLASSIFIERS AND FALLBACK ON WHILE COMPARATORS RAN WITH THEM OFF: 11 of 324 trials hit a refusal, 4 more terminated and counted as failures."}
+      - {benchmark: healthbench-professional, value: 62.1, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported, length-adjusted (74.2 raw); Opus 4.8 grader, 5 trials, no tools, no custom system prompt. OpenAI's re-run with GPT-5.4 grading gives 58.1."}
+      - {benchmark: benchcad, value: 84.3, unit: "voxel IoU x100", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "0.843 voxel IoU WITH TOOLS (0.437 no tools). OpenAI footnote 5 flags three Anthropic-made modifications to the reference implementation."}
+      - {benchmark: frontiermath-tier-4, value: 87.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI's run, FrontierMath v2, rank 3. NOTE Fable 5 scores HIGHER (90.2). Anthropic does not report FrontierMath at all."}
+      - {benchmark: livebench-overall, value: 83.4, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://livebench.ai/", conditions: "Max effort, rank 1 overall. Reasoning 91.7 / Coding 86.4 / Agentic Coding 66.1 / Math 97.0. $1.212/task. No LLM judge in any subtask."}
+      - {benchmark: livebench-agentic-coding, value: 66.1, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://livebench.ai/", conditions: "Max effort, $1.212/task. Beaten outright by DeepSeek V4.1-Flash at 77.3 for $0.029/task."}
+      - {benchmark: aa-index-v4-3, value: 53, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-3", conditions: "v4.3, published 2026-09-07, max/xhigh. Tied with GPT-6 Astra. $7.63/task vs Astra's $3.26. NOT comparable to v4.2 (57) or v4.1.1 (65.7)."}
+      - {benchmark: eci, value: 164.2, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/eci_scores.csv", conditions: "Epoch ECI, 13 Sep 2026 CSV. Epoch's 3 Sep X post said 163 for the same model -- the IRT model refits globally as models are added."}
+      - {benchmark: arena-agent-arena, value: 13.85, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arena.ai/leaderboard/agent", conditions: "Max, rank 1; net improvement +/-1.92 over 1.59M real agent sessions, $4.50/task. On the 'confirmed success' signal: 22.39%, also rank 1."}
+      - {benchmark: programbench, value: 87.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported; 166 'golden' tasks of 200, mini-swe-agent harness, no 6h limit."}
+      - {benchmark: simpleqa-verified, value: 70.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI own run of SimpleQA Verified."}
+      - {benchmark: gpqa-diamond, value: 93.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's INDEPENDENT run -- Anthropic does not report GPQA as a capability claim for any 5-series model. See the benchmark note: research/04 §0's 92.6 figure is Fable 5's, mis-attributed by a secondary aggregator."}
+
+  - id: claude-mythos-5-1
+    name: Claude Mythos 5.1
+    short: Mythos 5.1
+    org: Anthropic
+    weights: closed
+    released: "2026-09-01"
+    status: released
+    notes: >-
+      The SAME WEIGHTS as Fable 5.1 with fewer safeguards, restricted to ~50 partner orgs via
+      Project Glasswing.  Its scores are the cleanest available estimate of how much Anthropic's
+      production safeguards cost on the public numbers: Terminal-Bench 4.0 goes from 55.8 to
+      60.9 -- 5.1 points for the same weights.
+    scores:
+      - {benchmark: terminal-bench-4, value: 60.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "self-reported, 10 trials/task (vs 15 for Fable 5.1)."}
+      - {benchmark: eci, value: 161.98, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "AECI, Anthropic's INTERNAL fork of Epoch's index (95% CI 158.20-169.00, n=46). Anthropic states it is explicitly NOT comparable to Epoch's public ECI. Recorded for completeness only."}
+
+  - id: claude-opus-5
+    name: Claude Opus 5
+    short: Opus 5
+    org: Anthropic
+    weights: closed
+    released: "2026-07-24"
+    status: released
+    scores:
+      - {benchmark: terminal-bench-4, value: 51.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official board (Anthropic self-reports 52.3)."}
+      - {benchmark: swe-bench-pro, value: 79.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/b514064af1408018e64b1ad24e7d5e75850b4ffd/Claude%20Opus%205%20System%20Card.pdf", conditions: "self-reported, avg 5 trials."}
+      - {benchmark: swe-bench-verified, value: 96.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/b514064af1408018e64b1ad24e7d5e75850b4ffd/Claude%20Opus%205%20System%20Card.pdf", conditions: "self-reported, Opus 5 card §8.2. The highest SWE-bench Verified score anyone reports -- on a benchmark OpenAI deprecated for contamination in Feb 2026. Not present on the official swebench.com board, whose newest entry is 2026-02-26."}
+      - {benchmark: swe-bench-multilingual, value: 89.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "comparator column of the Fable 5.1 card. BEATS Fable 5.1 (89.1)."}
+      - {benchmark: swe-bench-multimodal, value: 59.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "comparator column. BEATS Fable 5.1 (54.7)."}
+      - {benchmark: deepswe-v1-1, value: 68.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's comparator column; OpenAI's independent run says 73.7 for the same model."}
+      - {benchmark: terminal-bench-science-0-1, value: 29.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column (OpenAI's run: 30.0)."}
+      - {benchmark: frontiercode-1-1-extended, value: 63.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: frontiercode-1-1-main, value: 53.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column. BEATS Fable 5.1 (50.9)."}
+      - {benchmark: frontierswe-v2, value: 0.52, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Proximal harness, comparator column."}
+      - {benchmark: hle-no-tools, value: 56.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: hle-with-tools, value: 63.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: automationbench, value: 26.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: gdpval-aa-v2, value: 1824, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: aa-briefcase, value: 1685, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: osworld-2-partial, value: 75.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's modified task set. OpenAI's run on the OFFICIAL settings gives 70.2 -- a 5.2-point dispute on the same model."}
+      - {benchmark: osworld-2-strict, value: 39.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's modified task set."}
+      - {benchmark: arc-agi-1, value: 97.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private, verified."}
+      - {benchmark: arc-agi-2, value: 90.42, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private, verified. Slightly ahead of Fable 5.1's 90.0."}
+      - {benchmark: arc-agi-3, value: 30.16, unit: "% RHAE", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/b514064af1408018e64b1ad24e7d5e75850b4ffd/Claude%20Opus%205%20System%20Card.pdf", conditions: "high effort. The ONLY Anthropic model with an ARC-AGI-3 number; Fable 5.1 has none."}
+      - {benchmark: agents-last-exam, value: 55.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's run. Fable 5.1 is unlisted by both labs."}
+      - {benchmark: mcp-atlas, value: 85.80, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/b514064af1408018e64b1ad24e7d5e75850b4ffd/Claude%20Opus%205%20System%20Card.pdf", conditions: "self-reported in the Opus 5 card."}
+      - {benchmark: toolathlon-verified, value: 80.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://kingy.ai/blog/claude-fable-5-1-benchmarks-price-mythos-access", conditions: "Pass@1. BEATS Fable 5.1 (77.8) -- and ran without the classifier/fallback handicap."}
+      - {benchmark: healthbench-professional, value: 56.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's re-run, length-adjusted, GPT-5.4 grading (Anthropic's own figure for Opus 5 is 73.4 raw)."}
+      - {benchmark: benchcad, value: 82.1, unit: "voxel IoU x100", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's table, with tools."}
+      - {benchmark: frontiermath-tier-4, value: 73.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI, FrontierMath v2."}
+      - {benchmark: browsecomp, value: 90.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's run. Fable 5.1 is not reported by either lab."}
+      - {benchmark: vending-bench-2, value: 11181.87, unit: USD, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://andonlabs.com/evals/vending-bench-2", conditions: "Final balance after 365 simulated days from $500. A competent human is estimated at ~$63k."}
+      - {benchmark: aa-index-v4-3, value: 51, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-3", conditions: "Artificial Analysis Intelligence Index v4.3, max effort, rank 7 overall."}
+      - {benchmark: eci, value: 162, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://x.com/EpochAIResearch/status/2095602754282783108", conditions: "Epoch ECI as published 6 Sep 2026."}
+      - {benchmark: arena-agent-arena, value: 11.06, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arena.ai/leaderboard/agent", conditions: "arena.ai Agent Arena, high effort, causal per-signal scoring over 1.59M real agent sessions."}
+      - {benchmark: programbench, value: 85.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: gpqa-diamond, value: 93.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's run. Epoch's own run gives 93.9."}
+
+  - id: claude-fable-5
+    name: Claude Fable 5
+    short: Fable 5
+    org: Anthropic
+    weights: closed
+    released: "2026-06-09"
+    status: released
+    scores:
+      - {benchmark: terminal-bench-4, value: 44.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official board (Anthropic self-reports 42.0)."}
+      - {benchmark: swe-bench-verified, value: 95.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.swebench.com/", conditions: "June 2026 figure. THIS is the number third-party sites keep mis-attributing to Fable 5.1 -- Fable 5.1 has no SWE-bench Verified score at all."}
+      - {benchmark: swe-bench-pro, value: 80.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: terminal-bench-science-0-1, value: 24.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: deepswe-v1-1, value: 69.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column. BEATS Fable 5.1 (67.4)."}
+      - {benchmark: hle-with-tools, value: 63.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: hle-no-tools, value: 57.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: automationbench, value: 17.05, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: gdpval-aa-v2, value: 1723, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: aa-briefcase, value: 1572, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: osworld-2-partial, value: 72.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's modified task set."}
+      - {benchmark: osworld-2-strict, value: 36.1, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic's modified task set."}
+      - {benchmark: arc-agi-1, value: 98.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize verified, $1.02/task. Joint best with GPT-6 Astra -- above the 98.0% human panel."}
+      - {benchmark: arc-agi-2, value: 89.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize verified, $5.45/task."}
+      - {benchmark: frontiermath-tier-4, value: 90.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI, v2. BEATS Fable 5.1 (87.8) -- a genuine regression across a point release."}
+      - {benchmark: browsecomp, value: 87.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI independently-run number from the GPT-6 Astra launch post -- the competitor view of the same model."}
+      - {benchmark: agents-last-exam, value: 48.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI independently-run number from the GPT-6 Astra launch post -- the competitor view of the same model."}
+      - {benchmark: livebench-overall, value: 83.0, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://livebench.ai/", conditions: "LiveBench overall, rank 2. No LLM judge in any subtask."}
+      - {benchmark: aa-index-v4-3, value: 50, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-3", conditions: "Artificial Analysis Intelligence Index v4.3, rank 9 overall."}
+      - {benchmark: eci, value: 163, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://x.com/EpochAIResearch/status/2095602754282783108", conditions: "Epoch ECI, 6 Sep 2026."}
+      - {benchmark: gpqa-diamond, value: 92.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "OpenAI's run. NOTE: research/04 §0 attributes this exact value to Fable 5.1 via a secondary aggregator; it belongs to Fable 5."}
+      - {benchmark: simpleqa-verified, value: 70.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI own run of SimpleQA Verified."}
+
+  - id: claude-sonnet-5
+    name: Claude Sonnet 5
+    short: Sonnet 5
+    org: Anthropic
+    weights: closed
+    released: "2026-06-30"
+    status: released
+    scores:
+      - {benchmark: terminal-bench-4, value: 12.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official board. The floor of the frontier column -- a reminder that 'frontier lab' is not one capability tier."}
+      - {benchmark: swe-bench-pro, value: 63.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/480e0bb54327b9622282e9c39a83a4f490ed377e/Claude%20Sonnet%205%20System%20Card.pdf", conditions: "self-reported by the lab in its own launch post; no independent replication recorded here."}
+      - {benchmark: swe-bench-multilingual, value: 78.3, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/480e0bb54327b9622282e9c39a83a4f490ed377e/Claude%20Sonnet%205%20System%20Card.pdf", conditions: "300 problems, 9 languages."}
+      - {benchmark: swe-bench-multimodal, value: 28.1, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/480e0bb54327b9622282e9c39a83a4f490ed377e/Claude%20Sonnet%205%20System%20Card.pdf", conditions: "self-reported; Anthropic internal harness, Sonnet 5 system card."}
+      - {benchmark: automationbench, value: 13.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: toolathlon-verified, value: 74.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://kingy.ai/blog/claude-fable-5-1-benchmarks-price-mythos-access", conditions: "Pass@1. Within 3 points of Fable 5.1 despite the Terminal-Bench gulf."}
+      - {benchmark: healthbench-professional, value: 62.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "length-adjusted, Opus 4.8 grader. Statistically level with Fable 5.1's 62.1."}
+      - {benchmark: gdpval-aa-v2, value: 1618, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+
+  # ---- OpenAI -----------------------------------------------------------------------
+
+  - id: gpt-6-astra
+    name: GPT-6 Astra
+    short: Astra
+    org: OpenAI
+    weights: closed
+    released: "2026-09-03"
+    status: released
+    notes: >-
+      Roughly tied with Fable 5.1 for the frontier.  Astra wins on mathematics, abstract
+      reasoning, computer use, cybersecurity and business-workflow automation; Fable 5.1 wins on
+      knowledge work, agentic reliability, long-horizon coding and HLE-with-tools.  At equal AA
+      index scores Astra costs $3.26/task against Fable 5.1's $7.63.
+    scores:
+      - {benchmark: terminal-bench-4, value: 58.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official board, max effort via Codex, SE +/-2.8. A statistical tie with Fable 5.1."}
+      - {benchmark: terminal-bench-science-0-1, value: 64.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported. Vals AI's independent run gives 65.71 -- the two agree, unlike for Fable 5.1."}
+      - {benchmark: deepswe-v1-1, value: 74.1, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported by the lab in its own launch post; no independent replication recorded here."}
+      - {benchmark: frontiercode-1-1-extended, value: 64.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported, using a Codex-style developer message instructing 'avoid unrelated cleanup... clean, mergeable code' (OpenAI footnote 8) -- i.e. prompt-engineered around the rubric Fable 5.1 trips over."}
+      - {benchmark: frontiercode-1-1-main, value: 53.3, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported, same developer message."}
+      - {benchmark: hle-with-tools, value: 57.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported. LOSES to Fable 5.1 (65.0) by 7.8 points."}
+      - {benchmark: automationbench, value: 41.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported; Zapier private held-out set, no safety-classifier handicap."}
+      - {benchmark: gdpval-aa-v2, value: 1580, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/comparisons/gpt-6-astra-vs-claude-fable-5-1", conditions: "Artificial Analysis's own run (vs its 1764 for Fable 5.1)."}
+      - {benchmark: aa-briefcase, value: 1562, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/comparisons/gpt-6-astra-vs-claude-fable-5-1", conditions: "Artificial Analysis own published run (Anthropic own run of the same benchmark differs -- see the Fable 5.1 row)."}
+      - {benchmark: osworld-2-partial, value: 72.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "the OFFICIAL offline task set, not Anthropic's modified one -- not directly comparable to Fable 5.1's 77.9."}
+      - {benchmark: arc-agi-1, value: 98.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private, verified. Above the 98.0% human panel."}
+      - {benchmark: arc-agi-2, value: 95.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private, verified, $1.12/task."}
+      - {benchmark: arc-agi-3, value: 62.7, unit: "% RHAE", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "STANDARD provider-agnostic harness, $26.1k. OpenAI's headline is 99.9% on its own Provider Adapter harness at $18.8k -- 37 points of harness. The apples-to-apples number is this one."}
+      - {benchmark: agents-last-exam, value: 59.3, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported by the lab in its own launch post; no independent replication recorded here."}
+      - {benchmark: healthbench-professional, value: 63.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported, length-adjusted, GPT-5.4 grading."}
+      - {benchmark: benchcad, value: 95.9, unit: "voxel IoU x100", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported, with tools."}
+      - {benchmark: frontiermath-tier-4, value: 97.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI, v2. The only model to have solved any FrontierMath Erdos problem (2 of 68)."}
+      - {benchmark: browsecomp, value: 91.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported by the lab in its own launch post; no independent replication recorded here."}
+      - {benchmark: livebench-overall, value: 82.2, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://livebench.ai/", conditions: "LiveBench overall, rank 3. No LLM judge in any subtask."}
+      - {benchmark: vending-bench-2, value: 15514.70, unit: USD, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://andonlabs.com/evals/vending-bench-2", conditions: "+/-1,074 final balance. Still ~4x below a competent human's estimated ~$63k."}
+      - {benchmark: aa-index-v4-3, value: 53, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-3", conditions: "v4.3, max/xhigh. Tied with Fable 5.1 at 53, for $3.26/task against $7.63."}
+      - {benchmark: eci, value: 166.6, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/eci_scores.csv", conditions: "Epoch ECI, 13 Sep 2026 CSV (Epoch's 3 Sep post said 169). Ahead of Fable 5.1's 164.2 but with overlapping CIs -- no statistically separable #1."}
+      - {benchmark: arena-agent-arena, value: 12.39, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arena.ai/leaderboard/agent", conditions: "arena.ai Agent Arena, max effort, causal per-signal scoring over 1.59M real agent sessions."}
+      - {benchmark: simpleqa-verified, value: 75.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI's run, rank 1."}
+      - {benchmark: gpqa-diamond, value: 96.0, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/gpt-6-astra", conditions: "self-reported. Epoch's own run gives 95.8. This is the saturation ceiling."}
+
+  - id: gpt-5-6-sol
+    name: GPT-5.6 Sol
+    short: Sol
+    org: OpenAI
+    weights: closed
+    released: "2026-07-09"
+    status: released
+    notes: >-
+      Superseded by Astra, but it is the model Anthropic benchmarked Fable 5.1 against (the
+      Fable 5.1 card was published 1 Sep, two days before Astra).  Also the model METR found
+      exploited tasks more than any public model it has evaluated -- its time horizon is
+      11.3 h / 71 h / >270 h depending purely on how exploitation is scored.
+    scores:
+      - {benchmark: terminal-bench-4, value: 37.3, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official board, Codex CLI."}
+      - {benchmark: terminal-bench-science-0-1, value: 22.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: swe-bench-pro, value: 64.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: automationbench, value: 19.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: gdpval-aa-v2, value: 1711, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: aa-briefcase, value: 1502, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Anthropic comparator column."}
+      - {benchmark: frontierswe-v2, value: 0.32, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf", conditions: "Proximal harness, comparator column."}
+      - {benchmark: arc-agi-1, value: 96.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize semi-private set, independently verified by ARC Prize."}
+      - {benchmark: arc-agi-2, value: 92.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize verified. Ahead of both Fable 5.1 (90.0) and Opus 5."}
+      - {benchmark: arc-agi-3, value: 38.3, unit: "% RHAE", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://openai.com/index/how-two-settings-tripled-our-arc-agi-3-scores/", conditions: "OpenAI Responses-API harness with retained reasoning + compaction, public set. The SAME MODEL scores 13.3% on the official harness (which discards reasoning and truncates at 175k) -- 3x the score with 6x fewer output tokens, from two API settings."}
+      - {benchmark: frontiermath-tier-4, value: 82.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/benchmarks.csv", conditions: "Epoch AI own run, FrontierMath v2 (the June 2026 revision that fixed errors in 42% of problems)."}
+      - {benchmark: aa-index-v4-3, value: 47, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/comparisons/gpt-6-astra-vs-claude-fable-5-1", conditions: "v4.3. research/04 §A.1 records the 20-22 band as 44 for Grok 4.6 / Sol; research/01 §2.4 records 47. Range 44-47."}
+      - {benchmark: eci, value: 162, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://x.com/EpochAIResearch/status/2095602754282783108", conditions: "Epoch ECI, 6 Sep 2026."}
+
+  # ---- Open weights -----------------------------------------------------------------
+  # research/01 §3.3: "the gap depends entirely on what you measure."  Knowledge and academic
+  # QA are essentially closed; composite indices show ~6-9 points (4.5-6 months); long-horizon
+  # agentic work is 7-16 points and NOT closing quickly; cost-normalised, open frequently wins.
+
+  - id: kimi-k3
+    name: Kimi K3
+    short: Kimi K3
+    org: Moonshot AI
+    weights: open
+    license: "Modified MIT (Kimi K3 licence)"
+    released: "2026-07-16"
+    params_total: 2.8e12
+    params_active: 104.0e9
+    status: released
+    notes: >-
+      Best open-weight model on Epoch's ECI (157.6, rank 11 overall) and the model that already
+      beat Claude Fable 5.1 on a benchmark that matters -- GPQA Diamond 93.5 vs 93.7 is a
+      statistical tie, and on BrowseComp its 91.2 sits level with Astra's 91.5.  2.8T total /
+      104B active, MoE with 896 experts, 1M context, MXFP4 weights.  Training compute is
+      UNVERIFIED -- no Chinese frontier lab disclosed GPU-hours or FLOPs for any 2026 model.
+    scores:
+      - {benchmark: gpqa-diamond, value: 93.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/moonshotai/Kimi-K3", conditions: "vendor-reported on the model card. Within 0.2 points of Fable 5.1's 93.7 -- but GPQA is saturated, so the tie reflects the benchmark being finished, not parity."}
+      - {benchmark: browsecomp, value: 91.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/moonshotai/Kimi-K3", conditions: "vendor-reported (range 90.4-91.2). Astra 91.5, Opus 5 90.8. Fable 5.1 has no BrowseComp number."}
+      - {benchmark: hle-no-tools, value: 43.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/moonshotai/Kimi-K3", conditions: "vendor-reported. 17.4 points behind Fable 5.1 -- the knowledge gap is wide without tools and nearly closed with them."}
+      - {benchmark: arc-agi-1, value: 94.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize's OWN run at max effort -- no open-weight vendor has self-published an ARC-AGI score."}
+      - {benchmark: mcp-atlas, value: 82.30, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://labs.scale.com/leaderboard", conditions: "Scale Labs, max effort."}
+      - {benchmark: gdpval-aa-v2, value: 1686, unit: Elo, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "Artificial Analysis's run. Compare against AA's own 1764 for Fable 5.1, not Anthropic's 1853."}
+      - {benchmark: arena-agent-arena, value: 6.46, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arena.ai/leaderboard/agent", conditions: "Max effort, rank 8, at $0.80/task against Fable 5.1's $4.50. On the 'confirmed success' signal Kimi K3 scores 15.11% and beats Opus 5."}
+      - {benchmark: aa-index-v4-3, value: 44, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "Artificial Analysis Intelligence Index v4.3, max effort, rank 23 overall -- the second-best open-weight index score."}
+      - {benchmark: eci, value: 157.6, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/eci_scores.csv", conditions: "Epoch ECI, 13 Sep 2026 CSV. Best open-weight model on ECI. Epoch: ~5 ECI is about one doubling of METR time horizon."}
+
+  - id: glm-5-3
+    name: GLM-5.3
+    short: GLM-5.3
+    org: Z.ai (Zhipu)
+    weights: open
+    license: "GLM-5.3 (custom)"
+    released: "2026-08-14"
+    params_total: 753.0e9
+    params_active: 40.0e9
+    status: released
+    notes: >-
+      Best open-weight model on the Artificial Analysis index (45 vs the frontier's 53).
+      Announced 2026-08-14; Z.ai slipped its own 2026-08-28 open-weight target and the weights
+      landed ~2026-09-04.  "Announced open" is not "downloadable" -- a recurring 2026 pattern.
+    scores:
+      - {benchmark: terminal-bench-4, value: 41.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.tbench.ai/leaderboard", conditions: "official board, max effort. Best open-weight score; 16.1 points behind Fable 5.1 on the same board."}
+      - {benchmark: automationbench, value: 48.2, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://z.ai/blog/glm-5.3", conditions: "VENDOR-REPORTED on the vendor's own harness. Not comparable to Anthropic's 31.4, which ran with safety classifiers on."}
+      - {benchmark: aa-index-v4-3, value: 45, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "v4.3, max effort, rank 19 overall -- the best open-weight index score."}
+
+  - id: deepseek-v4-1-flash
+    name: DeepSeek V4.1-Flash
+    short: DS V4.1-F
+    org: DeepSeek
+    weights: open
+    license: MIT
+    released: "2026-09-10"
+    params_total: 552.0e9
+    params_active: 8.0e9
+    status: released
+    notes: >-
+      552B backbone at 8B prefill / 16B decode -- the active-parameter trick taken to its
+      conclusion.  MIT licence.  Holds the single most important open-weight result of 2026:
+      it leads LiveBench's Agentic Coding column OUTRIGHT, on a board that uses no LLM judge.
+      Released 10 Sep 2026, so nothing here has been independently replicated yet.
+    scores:
+      - {benchmark: livebench-agentic-coding, value: 77.3, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://livebench.ai/", conditions: "OPEN WEIGHTS BEAT THE FRONTIER OUTRIGHT: 77.3 vs Fable 5.1's 66.1, at $0.029/task vs $1.212 (~40x cheaper). LiveBench uses no LLM judge in any subtask, which strengthens the result."}
+      - {benchmark: livebench-overall, value: 81.1, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://livebench.ai/", conditions: "rank 5 overall, 2.3 points behind Fable 5.1."}
+      - {benchmark: hle-with-tools, value: 63.9, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash", conditions: "vendor-reported. 1.1 points behind Fable 5.1 -- with tools, the knowledge gap is essentially closed."}
+      - {benchmark: automationbench, value: 54.8, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash", conditions: "VENDOR-REPORTED on the vendor's own harness. Not comparable to Anthropic's 31.4 (safety classifiers on) -- the apparent 23-point open win is mostly harness."}
+      - {benchmark: terminal-bench-2-1, value: 74.53, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://www.vals.ai/benchmarks/terminal-bench", conditions: "Vals AI's independent fixed harness. The vendor self-reports 90.6% on its own harness, which would beat every closed model -- ON THE INDEPENDENT HARNESS THE RANKING INVERTS and Fable 5.1's 85.02 wins. research/01 §6.1."}
+      - {benchmark: terminal-bench-2-1, value: 90.6, unit: "%", verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash", conditions: "VENDOR self-reported, own harness. Recorded to show the spread against the 74.53 independent figure; do not quote in isolation."}
+      - {benchmark: aa-index-v4-3, value: 40, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "Artificial Analysis Intelligence Index v4.3, published 2026-09-07, AA open-weights view. Not comparable to v4.2 or v4.1.1 -- the index refits and reorders on every version."}
+
+  - id: deepseek-v4-flash-0731
+    name: DeepSeek-V4-Flash-0731
+    short: DS V4-F
+    org: DeepSeek
+    weights: open
+    license: MIT
+    released: "2026-07-31"
+    params_total: 284.0e9
+    params_active: 13.0e9
+    status: released
+    notes: "The previous Flash generation. Holds the best open-weight ARC-AGI-2 score, and the most extreme cost-efficiency result in the dataset."
+    scores:
+      - {benchmark: arc-agi-2, value: 61.4, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://arcprize.org/leaderboard", conditions: "ARC Prize's OWN run at $0.042/task, against Fable 5.1's 90.0% at $4.49/task -- ~100x cheaper for two-thirds the score. Best open-weight ARC-AGI-2 result; the 28.6-point deficit is the widest open-vs-closed gap on any benchmark."}
+
+  - id: minimax-m3
+    name: MiniMax M3
+    short: MiniMax M3
+    org: MiniMax
+    weights: open
+    license: "MiniMax Community (modified MIT)"
+    released: "2026-06-01"
+    params_total: 428.0e9
+    params_active: 23.0e9
+    status: released
+    scores:
+      - {benchmark: swe-bench-verified, value: 80.5, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/MiniMaxAI/MiniMax-M3", conditions: "vendor-reported. Best VERIFIED open-weight SWE-bench Verified score (DeepSeek-V4-Pro-Max's 80.6 is UNVERIFIED and absent from the 0813 HF card). On a deprecated, contaminated benchmark."}
+      - {benchmark: osworld-2-strict, value: 4.6, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://osworld-v2.xlang.ai/", conditions: "official board, binary scoring. Best open-weight OSWorld 2.0 strict score -- roughly 37 points behind Fable 5.1's 41.7. The single widest capability gap in this file."}
+      - {benchmark: aa-index-v4-3, value: 30, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "Artificial Analysis Intelligence Index v4.3, published 2026-09-07, AA open-weights view. Not comparable to v4.2 or v4.1.1 -- the index refits and reorders on every version."}
+
+  - id: tencent-hy4-preview
+    name: Tencent Hy4-preview
+    short: Hy4
+    org: Tencent
+    weights: open
+    license: Apache-2.0
+    released: "2026-08-28"
+    params_total: 770.0e9
+    params_active: 49.0e9
+    status: released
+    scores:
+      - {benchmark: swe-bench-pro, value: 65.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://huggingface.co/tencent/Hy4-preview", conditions: "vendor-reported. Best TRUE-open SWE-bench Pro score (Qwen3.8-Max's 67.7 is higher but Epoch classifies Qwen3.8-Max as closed weights)."}
+
+  - id: glm-5-2
+    name: GLM-5.2
+    short: GLM-5.2
+    org: Z.ai (Zhipu)
+    weights: open
+    license: MIT
+    released: "2026-06"
+    status: released
+    scores:
+      - {benchmark: vending-bench-2, value: 8313.78, unit: USD, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://andonlabs.com/evals/vending-bench-2", conditions: "final balance; best open-weight result. Astra $15,514.70, Opus 5 $11,181.87. Fable 5.1 is charted but not in the top 10, so no gap can be computed."}
+      - {benchmark: swe-bench-pro, value: 62.1, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "quoted in research/01 §3.2 as a true-open comparator."}
+
+  - id: qwen3-8-max
+    name: Qwen3.8-Max (2.4T-A95B)
+    short: Qwen3.8-Max
+    org: Alibaba
+    weights: closed
+    license: "qwen3.8-max (custom)"
+    released: "2026-08-02"
+    params_total: 2.4e12
+    params_active: 95.0e9
+    status: released
+    notes: >-
+      FLAGGED: widely described as open, but EPOCH CLASSIFIES QWEN3.8-MAX AS CLOSED WEIGHTS
+      (research/01 §3.1: "do not cite as open").  It is therefore excluded from the best-open
+      column even though its numbers are strong.  The Arena WebDev #1 claim from 2 Sep is also
+      stale -- the current board shows it at #4.
+    scores:
+      - {benchmark: swe-bench-pro, value: 67.7, unit: "%", primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://qwen.ai/blog?id=qwen3.8", conditions: "vendor-reported. Higher than any true-open model, but Epoch classifies these weights as closed."}
+      - {benchmark: aa-index-v4-3, value: 40, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "Artificial Analysis Intelligence Index v4.3, published 2026-09-07, AA open-weights view. Not comparable to v4.2 or v4.1.1 -- the index refits and reorders on every version."}
+      - {benchmark: eci, value: 156.6, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://epoch.ai/data/eci_scores.csv", conditions: "Epoch ECI, 13 Sep 2026 CSV."}
+
+  - id: gpt-oss-120b
+    name: gpt-oss-120b
+    short: gpt-oss-120b
+    org: OpenAI
+    weights: open
+    license: Apache-2.0
+    released: "2025-08-05"
+    params_total: 117.0e9
+    params_active: 5.1e9
+    status: released
+    notes: >-
+      OpenAI's last open-weight release (there is no successor).  Low on capability indices, but
+      it holds the one board an open model wins outright against every closed frontier model.
+    scores:
+      - {benchmark: scale-fortress, value: 8.24, unit: score, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://labs.scale.com/leaderboard", conditions: "+/-1.93, LOWER IS BETTER, rank 1 outright ahead of every closed frontier model. Measures refusal/safeguard behaviour on dual-use requests, not capability."}
+      - {benchmark: aa-index-v4-3, value: 12, unit: index, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://artificialanalysis.ai/models/open-source", conditions: "Artificial Analysis Intelligence Index v4.3, published 2026-09-07, AA open-weights view. Not comparable to v4.2 or v4.1.1 -- the index refits and reorders on every version."}
+
+  # ---- Reference: small and old models ------------------------------------------------
+
+  - id: gpt2-124m
+    name: GPT-2 small (124M)
+    short: GPT-2 124M
+    org: OpenAI
+    weights: open
+    license: MIT
+    released: "2019-02-14"
+    params_total: 124.0e6
+    params_active: 124.0e6
+    status: released
+    notes: >-
+      RUNG 0'S TARGET.  The whole point of the ladder's bottom rung: match this, from scratch,
+      on a 16 GB Mac Mini, for $0.  Original training cost ~$43K in 2019 (for the 1.5B variant;
+      see gpt2-xl-1558m).
+    scores:
+      - {benchmark: hellaswag, value: 31.1, unit: "% acc_norm", primary: true, verified: false, retrieved: "2026-09-13", source_url: "https://github.com/karpathy/llm.c", conditions: "length-normalised accuracy, GPT-2 tokenizer, 10,042 validation examples, llm.c's hellaswag.py protocol. QUOTED AS '~31.1' in docs/ARCHITECTURE.md §6 and NOT re-retrieved from the primary source during this build -- ARCHITECTURE §6 requires us to re-measure it by running our own eval on the HF gpt2 weights loaded into our GPT class. verified:false until we do."}
+      - {benchmark: hellaswag, value: 29.4, unit: "% acc", verified: false, retrieved: "2026-09-13", source_url: "https://github.com/karpathy/llm.c", conditions: "unnormalised accuracy, same protocol. Same caveat as acc_norm; this is the >= 29.4% acceptance threshold in docs/ARCHITECTURE.md §10."}
+
+  - id: gpt2-xl-1558m
+    name: "GPT-2 XL (1.6B, as cited by nanochat)"
+    short: GPT-2 XL
+    org: OpenAI
+    weights: open
+    license: MIT
+    released: "2019-11-05"
+    params_total: null
+    params_active: null
+    status: released
+    notes: >-
+      RUNG 1'S TARGET, and the reference point nanochat's leaderboard scores against.  ~168 h on
+      32 TPUv3, roughly $43K in 2019.  An 8xH100 run now beats it in 1.65 hours for ~$20 spot.
+      Parameter count left null on purpose: both research/02 and research/04 cite this model only
+      as "GPT-2 (1.6B)", and the exact figure (1,542M or 1,558M, depending on what is counted) is
+      not in our sources.
+    scores:
+      - {benchmark: dclm-core, value: 0.256525, unit: CORE, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://github.com/karpathy/nanochat/blob/master/dev/LEADERBOARD.md", conditions: "nanochat's CORE normalisation over the 22 DCLM tasks -- the reference point given in dev/LEADERBOARD.md itself. This is the number every nanochat leaderboard entry must exceed."}
+
+  - id: nanochat-speedrun-record
+    name: nanochat speedrun record (Run 6, 2026-03-14)
+    short: nanochat rec
+    org: karpathy/nanochat
+    weights: open
+    license: MIT
+    released: "2026-03-14"
+    status: released
+    notes: >-
+      8xH100, 1.65 h, ~$20 spot / ~$40 on-demand.  "backout and smear" architecture changes.
+      Time-to-GPT-2 fell 3.04 h -> 1.65 h in seven weeks.  Rung 1's real price tag.
+    scores:
+      - {benchmark: dclm-core, value: 0.262634, unit: CORE, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://github.com/karpathy/nanochat/blob/master/dev/LEADERBOARD.md", conditions: "depth 22/24, 1.65 h on 8xH100. Beats GPT-2 XL's 0.256525. The board's highest CORE is Run 5's 0.2690 (~2.02 h, autoresearch-discovered optimizations)."}
+
+  - id: modded-nanogpt-124m-record
+    name: modded-nanogpt speedrun record #89 (2026-07-17)
+    short: modded-nanogpt
+    org: KellerJordan/modded-nanogpt
+    weights: open
+    license: MIT
+    released: "2026-07-17"
+    params_total: 124.0e6
+    params_active: 124.0e6
+    status: released
+    notes: >-
+      RUNG 0'S QUALITY BAR, at the same parameter count: 3.28 FineWeb val loss in 1.23 minutes
+      on 8xH100, via "MLP down projection in FP8 with efficient delayed scaling metric".  Stack:
+      Muon, FlashAttention-3, value embeddings, logit softcapping, FP8, paired-head attention,
+      learnable XSA.  Progression: 45 min (llm.c, 2024-05) -> 7.8 min -> 2.992 -> 2.128 -> 1.521
+      -> 1.23 min.
+    scores:
+      - {benchmark: fineweb-val-loss, value: 3.28, unit: nats/token, primary: true, verified: true, retrieved: "2026-09-13", source_url: "https://github.com/KellerJordan/modded-nanogpt", conditions: "LOWER IS BETTER. 124M params, 8xH100, 1.23 min. This is the speedrun's fixed target loss, not a best-effort minimum -- the competition is on time-to-3.28, so 3.28 is a threshold every record shares."}
+
+  # ---- Ours ---------------------------------------------------------------------------
+  # No scores. Every cell renders as an em dash until we have actually measured something, at
+  # which point r52/eval/report.py writes results/<run>/<eval>.json and gap.py picks it up.
+
+  - id: r52-nano-30m
+    name: "r52 nano-30m (planned)"
+    short: r52-nano-30m
+    org: road-to-52
+    weights: open
+    license: Apache-2.0
+    status: planned
+    params_total: 35.0e6
+    params_active: 35.0e6
+    notes: >-
+      docs/ARCHITECTURE.md §10 Run A: ~35M params, seq 1024, 0.4B tokens, ~1 day on the M4.
+      Purpose is to prove the pipeline end to end and to serve as the base for SFT/RL demos --
+      it is not expected to be competitive on anything.
+    targets:
+      note: "No target scores set; this run exists to validate the pipeline, not to beat a model."
+
+  - id: r52-gpt2-124m-mac
+    name: "r52 gpt2-124m-mac (planned)"
+    short: r52-124m
+    org: road-to-52
+    weights: open
+    license: Apache-2.0
+    status: planned
+    params_total: 124.0e6
+    params_active: 124.0e6
+    notes: >-
+      docs/ARCHITECTURE.md §10 Run B and Rung 0 of the ladder: 124M params, seq 1024,
+      <=0.75B tokens, ~5 days on a 16 GB Mac Mini M4 for $0.  Acceptance criteria below.
+    targets:
+      fineweb-val-loss: {value: 3.28, unit: nats/token, direction: "<=", source: "docs/ARCHITECTURE.md §10; modded-nanogpt's speedrun target at the same parameter count"}
+      hellaswag: {value: 29.4, unit: "% acc", direction: ">=", source: "docs/ARCHITECTURE.md §10; the GPT-2 124M reference"}
+      dclm-core: {value: null, unit: CORE, direction: ">=", source: "TO BE MEASURED BY US -- no published CORE score exists for GPT-2 small (124M); nanochat's leaderboard reference is GPT-2 XL (1.5B) at 0.256525. ARCHITECTURE §6 requires running our CORE port on HF gpt2 to establish the 124M reference before we can claim to beat it."}
+
+# =======================================================================================
+# SATURATION SCORECARD -- research/01 §7, verbatim
+# =======================================================================================
+saturation_scorecard:
+  retrieved: "2026-09-13"
+  source_url: null
+  source: "research/01-benchmarks-and-bar.md §7"
+  saturated:
+    - {label: "SWE-bench Verified", detail: "contaminated; formally deprecated by OpenAI (Feb 2026)"}
+    - {label: "ARC-AGI-1", detail: "98.5% > the 98.0% human panel"}
+    - {label: "Arena Text", detail: "top 4 within 5 Elo, confidence intervals overlap"}
+    - {label: "AIME / OTIS Mock AIME", detail: "7 models at exactly 100.0%; explicitly retired by Anthropic"}
+    - {label: "MATH Level 5", detail: "98.1%, abandoned"}
+    - {label: "MMLU / MMLU-Pro", detail: "dropped by every 2026 launch"}
+    - {label: "OSWorld v1", detail: "86%"}
+    - {label: "BrowseComp", detail: "92%"}
+    - {label: "Aider Polyglot", detail: "last update 2025-11-20"}
+    - {label: "BigCodeBench", detail: "~Apr 2025"}
+    - {label: "LiveCodeBench official board", detail: "window ends May 2025"}
+    - {label: "MASK", detail: "7 models >90%"}
+  near_saturated:
+    - {label: "ARC-AGI-2", detail: "95.0%; 12+ configurations at >=88%"}
+    - {label: "MCP-Atlas", detail: "10 models within 8.9 points"}
+    - {label: "GPQA Diamond", detail: "top 10 within 1.9 points"}
+    - {label: "SimpleBench", detail: "4 models above the human baseline"}
+    - {label: "Arena Document", detail: "top 6 within 22 Elo"}
+  real_headroom:
+    - {label: "OSWorld 2.0", detail: "31.4% binary ceiling"}
+    - {label: "Remote Labor Index", detail: "15.8% ceiling"}
+    - {label: "ARC-AGI-3 (standard harness)", detail: "62.7%"}
+    - {label: "Terminal-Bench 4.0", detail: "58.2%"}
+    - {label: "HLE", detail: "54.8% ceiling on Scale's run"}
+    - {label: "EnigmaEval", detail: "39.3%"}
+    - {label: "Vending-Bench 2", detail: "4x below a competent human (~$63k)"}
+    - {label: "FrontierMath Erdos", detail: "2.9% -- one model has solved any at all"}
+    - {label: "Harvey Legal Agent Bench", detail: "15.8% best all-criteria-pass"}
