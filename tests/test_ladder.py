@@ -265,15 +265,16 @@ def test_smollm3_gpu_hours_reproduce_the_disclosure(ladder: L.Ladder) -> None:
 # ======================================================================================
 
 
-def test_rung_0_is_free_and_about_five_days(ladder: L.Ladder) -> None:
+def test_rung_0_is_free_and_about_three_days(ladder: L.Ladder) -> None:
     res = ladder.compute(next(r for r in ladder.rungs if r.id == "rung-0-gpt2-124m-mac"))
     assert res.flops_low == pytest.approx(5.58e17, rel=1e-6)
     assert res.cost_spot_low == 0.0
     assert res.cost_on_demand_low == 0.0
     # docs/ARCHITECTURE.md §10 independently estimates 4-6 days
-    assert 4 * 24 <= res.wall_clock_low <= 6 * 24
+    assert 2 * 24 <= res.wall_clock_low <= 4 * 24  # measured 3,034 tok/s -> ~68 h
     # MFU is exactly the measured training-effective rate over the theoretical peak
-    assert res.rung.mfu * res.hardware.peak_tflops == pytest.approx(1.3, rel=0.01)
+    # 0.535 x 4.26 TFLOPS reproduces the measured 3,034 tok/s (results/mlx_pretrain_bench.md).
+    assert res.rung.mfu * res.hardware.peak_tflops == pytest.approx(2.28, rel=0.01)
 
 
 def test_rung_2b_is_about_the_two_thousand_dollar_budget(ladder: L.Ladder) -> None:

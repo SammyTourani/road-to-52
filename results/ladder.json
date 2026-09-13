@@ -165,7 +165,9 @@
         "theoretical_fp32_tflops": 4.26,
         "bf16_matmul_tflops": 3.6,
         "training_effective_tflops": 1.3,
-        "training_effective_at_params": 111000000.0
+        "training_effective_at_params": 111000000.0,
+        "training_effective_tflops_optimized": 2.59,
+        "training_effective_optimized_at_params": 124000000.0
       },
       "source": "measured 2026-09-13, road-to-52 probe (this machine: Mac Mini M4, 16 GB, macOS 26.5.2)",
       "source_url": null,
@@ -712,14 +714,14 @@
       "id": "rung-0-gpt2-124m-mac",
       "kind": "rung",
       "name": "Rung 0 -- GPT-2 small, from scratch, on a Mac Mini",
-      "beats": "GPT-2 small (124M, 2019)",
-      "status": "planned",
+      "beats": "GPT-2 small (124M, 2019) as measured with our own eval code (results/gpt2-124m-reference)",
+      "status": "running",
       "verified": true,
       "inputs": {
         "params_total": 124000000.0,
         "params_active": 124000000.0,
         "tokens": 750000000.0,
-        "mfu": 0.3052,
+        "mfu": 0.535,
         "hardware": "mac_m4_10core",
         "peak_tflops": 4.26,
         "gpus": 1,
@@ -728,10 +730,10 @@
       "computed": {
         "flops_low": 5.58e+17,
         "flops_high": 5.58e+17,
-        "gpu_hours_low": 119.21683003218085,
-        "gpu_hours_high": 119.21683003218085,
-        "wall_clock_hours_low": 119.21683003218085,
-        "wall_clock_hours_high": 119.21683003218085,
+        "gpu_hours_low": 68.00930191742354,
+        "gpu_hours_high": 68.00930191742354,
+        "wall_clock_hours_low": 68.00930191742354,
+        "wall_clock_hours_high": 68.00930191742354,
         "cost_usd_spot_low": 0.0,
         "cost_usd_spot_high": 0.0,
         "cost_usd_on_demand_low": 0.0,
@@ -742,8 +744,10 @@
       },
       "disclosed": null,
       "targets": {
-        "fineweb_val_loss": 3.28,
-        "hellaswag_acc": 0.294,
+        "fineweb_val_loss": 3.447,
+        "hellaswag_acc_norm": 0.2938,
+        "hellaswag_acc": 0.2853,
+        "fineweb_val_loss_stretch": 3.28,
         "dclm_core": "GPT-2 small reference, to be measured by us"
       },
       "notes": "docs/ARCHITECTURE.md \u00a710 Run B: 124M params, seq 1024, <=0.75B tokens, target val loss <= 3.28. MFU 0.3052 is exactly the measured training-effective 1.3 TFLOPS divided by the 4.26 TFLOPS theoretical FP32 peak (both measured 2026-09-13, road-to-52 probe; the 1.3 figure was measured at 111M params, not 124M, so treat the wall-clock as +/- one bucket). The resulting ~119 h / ~5.0 days agrees with ARCHITECTURE \u00a710's independent \"4-6 days\" estimate. Cost is the *marginal* cost of hardware we already own -- $0, not \"free\"."

@@ -8,7 +8,7 @@
 
 | Rung | Beats (target model) | Params (total / active) | Tokens | FLOPs | Hardware | GPU-hours | Wall-clock | $ spot | $ on-demand | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Rung 0 -- GPT-2 small, from scratch, on a Mac Mini | GPT-2 small (124M, 2019) | 124M / 124M | 750M | 5.58e17 | mac_m4_10core x1 | 119 | 119 h (5.0 d) | $0 | $0 | planned |
+| Rung 0 -- GPT-2 small, from scratch, on a Mac Mini | GPT-2 small (124M, 2019) as measured with our own eval code (results/gpt2-124m-reference) | 124M / 124M | 750M | 5.58e17 | mac_m4_10core x1 | 68 | 68 h (2.8 d) | $0 | $0 | running |
 | Rung 1 -- nanochat-class 1B on a rented 8xH100 node | GPT-2 XL (1.6B, 2019) -- CORE 0.256525, ~168 h on 32 TPUv3, ~$43K in 2019 | 1B / 1B | 20B | 1.20e20 | h100 x8 | 96 | 12.0 h | $91 | $234 | planned |
 | Rung 2 -- 3B dense, Chinchilla-optimal | (no named model claimed -- see notes) | 3B / 3B | 60B | 1.08e21 | h100 x8 | 867 | 108 h (4.5 d) | $815 | $2,106 | planned |
 | Rung 2 (MoE) -- 30B-A3B, Chinchilla-optimal on active params | Qwen3-30B-A3B-shaped capacity for a 3B-dense training bill | 30B / 3B | 60B | 1.08e21 | h100 x8 | 867 | 108 h (4.5 d) | $815 | $2,106 | planned |

@@ -39,15 +39,23 @@ rungs:
     params_total: 124.0e6
     params_active: 124.0e6
     tokens: 0.75e9
-    mfu: 0.3052
+    # 0.535 of the 4.26 TFLOPS theoretical peak reproduces the *measured* 3,034 tok/s for this
+    # exact config (results/mlx_pretrain_bench.md, 124M / seq 1024 / mixed / compiled): 6ND
+    # hours = 5.58e17 / (4.26e12 * 0.535 * 3600) = 68 h. (The bench reports 60.9% because it
+    # also counts the attention FLOPs term.) Previous value 0.3052 was the naive first probe.
+    mfu: 0.535
     hardware: mac_m4_10core
     gpus: 1
     price: mac_m4_owned
-    beats: "GPT-2 small (124M, 2019)"
-    status: planned
+    beats: "GPT-2 small (124M, 2019) as measured with our own eval code (results/gpt2-124m-reference)"
+    status: running
     targets:
-      fineweb_val_loss: 3.28
-      hellaswag_acc: 0.294
+      # primary bars: OpenAI's released gpt2 (124M) measured here with the same code
+      fineweb_val_loss: 3.447
+      hellaswag_acc_norm: 0.2938
+      hellaswag_acc: 0.2853
+      # stretch: the modded-nanogpt speedrun bar (llm.c's FineWeb-trained 124M reproduction)
+      fineweb_val_loss_stretch: 3.28
       dclm_core: "GPT-2 small reference, to be measured by us"
     notes: >-
       docs/ARCHITECTURE.md §10 Run B: 124M params, seq 1024, <=0.75B tokens, target val loss
