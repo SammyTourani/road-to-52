@@ -4029,15 +4029,15 @@
             "gpt-oss-120b": null,
             "gpt2-124m": {
               "model": "gpt2-124m",
-              "value": 31.1,
+              "value": 29.376618203545114,
               "unit": "% acc_norm",
-              "source_url": "https://github.com/karpathy/llm.c",
+              "source_url": "results/gpt2-124m-reference/eval.json",
               "retrieved": "2026-09-13",
-              "conditions": "length-normalised accuracy, GPT-2 tokenizer, 10,042 validation examples, llm.c's hellaswag.py protocol. QUOTED AS '~31.1' in docs/ARCHITECTURE.md \u00a76 and NOT re-retrieved from the primary source during this build -- ARCHITECTURE \u00a76 requires us to re-measure it by running our own eval on the HF gpt2 weights loaded into our GPT class. verified:false until we do.",
-              "verified": false,
-              "measured_by_us": false,
-              "commit": null,
-              "command": null
+              "conditions": "MEASURED BY US. examples 10042, few-shot 0, tokenizer gpt2 (tiktoken), block_size 1024, protocol llm.c dev/data/hellaswag.py completion style, token-length acc_norm [commit 5c209e2+dirty; `python -m r52.eval.hellaswag --model models/gpt2-mlx`]",
+              "verified": true,
+              "measured_by_us": true,
+              "commit": "5c209e2+dirty",
+              "command": "python -m r52.eval.hellaswag --model models/gpt2-mlx"
             },
             "gpt2-xl-1558m": null,
             "nanochat-speedrun-record": null,
@@ -4492,7 +4492,18 @@
             "glm-5-2": null,
             "qwen3-8-max": null,
             "gpt-oss-120b": null,
-            "gpt2-124m": null,
+            "gpt2-124m": {
+              "model": "gpt2-124m",
+              "value": 3.4471360768191515,
+              "unit": "nats/token",
+              "source_url": "results/gpt2-124m-reference/eval.json",
+              "retrieved": "2026-09-13",
+              "conditions": "MEASURED BY US. examples 10485760, tokenizer gpt2 (tiktoken), block_size 1024, split fineweb_val_000000.bin first 10,485,760 tokens, non-overlapping windows, precision bf16 compute, fp32 log-sum-exp [commit 5c209e2+dirty; `python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2`]",
+              "verified": true,
+              "measured_by_us": true,
+              "commit": "5c209e2+dirty",
+              "command": "python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2"
+            },
             "gpt2-xl-1558m": null,
             "nanochat-speedrun-record": null,
             "modded-nanogpt-124m-record": {

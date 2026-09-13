@@ -191,16 +191,16 @@ These are **dead at the frontier** — research/01 §1.4: not one of the nine Se
 
 | Benchmark | best_open | gap_to_fable_5_1 | Fable 5.1 | Opus 5 | Fable 5 | Astra | Kimi K3 | GPT-2 124M |
 |---|---|---|---|---|---|---|---|---|
-| HellaSwag | 31.1¹³⁰† | — | — | — | — | — | — | 31.1¹³⁰† |
+| HellaSwag | 31.1¹³⁰† | — | — | — | — | — | — | 29.3766¹³⁵ |
 | ARC-Challenge | — | — | — | — | — | — | — | — |
 | MMLU-Pro | — | — | — | — | — | — | — | — |
-| GPQA Diamond | 93.5¹³² | +0.2 pts | 93.7¹³¹ | 93.7¹³⁵ | 92.6¹³⁶ | 96¹³⁷ | 93.5¹³² | — |
+| GPQA Diamond | 93.5¹³² | +0.2 pts | 93.7¹³¹ | 93.7¹³⁶ | 92.6¹³⁷ | 96¹³⁸ | 93.5¹³² | — |
 | GSM8K | — | — | — | — | — | — | — | — |
 | MATH-500 | — | — | — | — | — | — | — | — |
 | HumanEval | — | — | — | — | — | — | — | — |
 | IFEval | — | — | — | — | — | — | — | — |
 | DCLM CORE | 0.262634¹³³ | — | — | — | — | — | — | — |
-| FineWeb validation loss | 3.28¹³⁴ | — | — | — | — | — | — | — |
+| FineWeb validation loss | 3.28¹³⁴ | — | — | — | — | — | — | 3.44714¹³⁹ |
 
 #### Full matrix (columns 2 of 2)
 
@@ -214,7 +214,7 @@ These are **dead at the frontier** — research/01 §1.4: not one of the nine Se
 | MATH-500 | — | — | — | — | — |
 | HumanEval | — | — | — | — | — |
 | IFEval | — | — | — | — | — |
-| DCLM CORE | 0.256525¹³⁸ | 0.262634¹³³ | — | — | — |
+| DCLM CORE | 0.256525¹⁴⁰ | 0.262634¹³³ | — | — | — |
 | FineWeb validation loss | — | — | 3.28¹³⁴ | — | — |
 
 ## Our runs: targets, not results
@@ -464,7 +464,9 @@ research/01 §0: *"Every headline number in this report is a model + harness + e
 132. vendor-reported on the model card. Within 0.2 points of Fable 5.1's 93.7 -- but GPQA is saturated, so the tie reflects the benchmark being finished, not parity. — [source](https://huggingface.co/moonshotai/Kimi-K3)
 133. depth 22/24, 1.65 h on 8xH100. Beats GPT-2 XL's 0.256525. The board's highest CORE is Run 5's 0.2690 (~2.02 h, autoresearch-discovered optimizations). — [source](https://github.com/karpathy/nanochat/blob/master/dev/LEADERBOARD.md)
 134. LOWER IS BETTER. 124M params, 8xH100, 1.23 min. This is the speedrun's fixed target loss, not a best-effort minimum -- the competition is on time-to-3.28, so 3.28 is a threshold every record shares. — [source](https://github.com/KellerJordan/modded-nanogpt)
-135. OpenAI's run. Epoch's own run gives 93.9. — [source](https://openai.com/index/gpt-6-astra)
-136. OpenAI's run. NOTE: research/04 §0 attributes this exact value to Fable 5.1 via a secondary aggregator; it belongs to Fable 5. — [source](https://openai.com/index/gpt-6-astra)
-137. self-reported. Epoch's own run gives 95.8. This is the saturation ceiling. — [source](https://openai.com/index/gpt-6-astra)
-138. nanochat's CORE normalisation over the 22 DCLM tasks -- the reference point given in dev/LEADERBOARD.md itself. This is the number every nanochat leaderboard entry must exceed. — [source](https://github.com/karpathy/nanochat/blob/master/dev/LEADERBOARD.md)
+135. MEASURED BY US. examples 10042, few-shot 0, tokenizer gpt2 (tiktoken), block_size 1024, protocol llm.c dev/data/hellaswag.py completion style, token-length acc_norm [commit 5c209e2+dirty; `python -m r52.eval.hellaswag --model models/gpt2-mlx`] — [source](results/gpt2-124m-reference/eval.json)
+136. OpenAI's run. Epoch's own run gives 93.9. — [source](https://openai.com/index/gpt-6-astra)
+137. OpenAI's run. NOTE: research/04 §0 attributes this exact value to Fable 5.1 via a secondary aggregator; it belongs to Fable 5. — [source](https://openai.com/index/gpt-6-astra)
+138. self-reported. Epoch's own run gives 95.8. This is the saturation ceiling. — [source](https://openai.com/index/gpt-6-astra)
+139. MEASURED BY US. examples 10485760, tokenizer gpt2 (tiktoken), block_size 1024, split fineweb_val_000000.bin first 10,485,760 tokens, non-overlapping windows, precision bf16 compute, fp32 log-sum-exp [commit 5c209e2+dirty; `python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2`] — [source](results/gpt2-124m-reference/eval.json)
+140. nanochat's CORE normalisation over the 22 DCLM tasks -- the reference point given in dev/LEADERBOARD.md itself. This is the number every nanochat leaderboard entry must exceed. — [source](https://github.com/karpathy/nanochat/blob/master/dev/LEADERBOARD.md)
