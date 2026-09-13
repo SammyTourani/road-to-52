@@ -379,7 +379,7 @@ def evaluate_task(
                 correct += int(bool(arr[off, s - 1 : e - 1].all()))
             else:
                 means = [
-                    float(np.mean(arr[off + i, s - 1 : e - 1])) if e - 1 > s - 1 else float("inf")
+                    float(np.mean(arr[off + i, s - 1 : e - 1])) if e > s >= 1 else float("inf")
                     for i, (s, e) in enumerate(zip(it.starts, it.ends, strict=True))
                 ]
                 correct += int(means.index(min(means)) == it.gold)

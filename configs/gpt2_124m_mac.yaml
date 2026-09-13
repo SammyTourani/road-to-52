@@ -97,6 +97,8 @@ train:
   adam_betas_head: [0.5, 0.95]
   adam_betas_scalar: [0.9, 0.99]
   adam_eps: 1.0e-10
+  adam_bias_correction: false # this run started without it (mlx default); kept OFF so a resume
+                             # keeps identical optimizer semantics. New runs default to true.
   adam_wd_embed: 0.0
   adam_wd_vembed: 0.025
   adam_wd_head: 0.75
@@ -112,11 +114,16 @@ train:
 
   max_tokens: 750000000      # 0.75B tokens -> 5722 optimizer steps
   max_hours: 0.0
-  target_val_loss: 3.28
+  target_val_loss: 0.0       # disabled (review C1): the periodic val is a 262k-token PREFIX that
+                             # reads ~0.09 nats easier than the full split, and an early break would
+                             # skip the cooldown. The 3.28 / 3.447 bars are judged by scripts/eval.sh
+                             # on the full split at the end of the run.
 
   log_interval: 10
   val_interval: 250
-  val_max_batches: 128       # 128 x 2 x 1024 = 262,144 tokens (+-0.004 nats std. err.).
+  val_max_batches: 128       # 128 x 2 x 1024 = 262,144 tokens -- the FIRST windows of the split,
+                             # not a sample: on models/gpt2-mlx this prefix reads 3.3536 vs 3.4471
+                             # full-split (-0.094 nats); honest SE ~0.04. Curve shape only.
                              # Set to 0 for the full 10,485,760-token split (~10 min).
   val_micro_batch: 2
   ckpt_interval: 250

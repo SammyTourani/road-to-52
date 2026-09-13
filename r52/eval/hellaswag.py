@@ -264,7 +264,7 @@ def evaluate_hellaswag(
         # llm.c: shift the mask by one so scoring starts at the last context token, which is
         # the position that predicts the first ending token.
         sum_loss = (nll[:, :-1] * mask[:, 1:]).sum(axis=1)
-        n_end = mask[:, 1:].sum(axis=1)
+        n_end = mask.sum(axis=1) - mask[:, 0]  # robust if truncation ate the whole context
         mx.eval(sum_loss, n_end)
         sum_np = np.asarray(sum_loss, dtype=np.float64)
         cnt_np = np.asarray(n_end, dtype=np.float64)

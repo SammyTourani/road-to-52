@@ -103,6 +103,7 @@ class Trainer:
 
         self.stream = make_train_stream(cfg.data, mc.block_size, tc.micro_batch, mc.vocab_size)
         val_mb = tc.val_micro_batch or tc.micro_batch
+        self._val_mb = val_mb
         self.val_loader = make_val_loader(cfg.data, mc.block_size, val_mb, tc.val_max_batches, mc.vocab_size)
         self.bytes_per_token = self._bytes_per_token()
 
@@ -367,8 +368,23 @@ class Trainer:
                     self.best_val = v["val_loss"]
                     self.save(tag="best", val_loss=v["val_loss"])
                 if target and v["val_loss"] <= target:
-                    self.stop_reason = "target_val_loss"
-                    break
+                    # The periodic val is the FIRST `val_max_batches` windows -- a fixed prefix,
+                    # not a sample -- measured ~0.09 nats *easier* than the full split on
+                    # models/gpt2-mlx (review 2026-09-13, C1). Confirm on the spec-exact
+                    # full split before believing the target was reached.
+                    full = evaluate(
+                        self.model,
+                        make_val_loader(self.cfg.data, self.cfg.model.block_size, self._val_mb, 0,
+                                        self.cfg.model.vocab_size),
+                        self.bytes_per_token,
+                    )
+                    full.update({"event": "val_full", "step": self.step, "tokens": self.tokens})
+                    self.log(full)
+                    print(f"  val* {self.step:>6} | full-split {full['val_loss']:.4f} "
+                          f"| {full['val_tokens']:,} tokens", flush=True)
+                    if full["val_loss"] <= target:
+                        self.stop_reason = "target_val_loss"
+                        break
                 t_window, tok_window, loss_window, n_window = time.time(), 0, 0.0, 0
 
             if tc.ckpt_interval and self.step % tc.ckpt_interval == 0:

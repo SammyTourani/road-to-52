@@ -199,24 +199,28 @@ def build_optimizer(cfg: TrainConfig, params: dict | None = None) -> R52Optimize
         betas=list(cfg.adam_betas_embed),
         eps=cfg.adam_eps,
         weight_decay=cfg.adam_wd_embed,
+        bias_correction=cfg.adam_bias_correction,
     )
     vembed = optim.AdamW(
         learning_rate=cfg.adam_lr_vembed,
         betas=list(cfg.adam_betas_vembed),
         eps=cfg.adam_eps,
         weight_decay=cfg.adam_wd_vembed,
+        bias_correction=cfg.adam_bias_correction,
     )
     head = optim.AdamW(
         learning_rate=cfg.adam_lr_head,
         betas=list(cfg.adam_betas_head),
         eps=cfg.adam_eps,
         weight_decay=cfg.adam_wd_head,
+        bias_correction=cfg.adam_bias_correction,
     )
     scalar = optim.AdamW(
         learning_rate=cfg.adam_lr_scalar,
         betas=list(cfg.adam_betas_scalar),
         eps=cfg.adam_eps,
         weight_decay=cfg.adam_wd_scalar,
+        bias_correction=cfg.adam_bias_correction,
     )
     groups = [
         _Group("muon", muon, cfg.muon_lr),

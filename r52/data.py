@@ -138,8 +138,8 @@ class TokenStream:
             self._lengths = [read_shard_header(p) for p in self.paths]
         self.cursor = cursor or Cursor()
         span = self.micro_batch * self.block_size + 1
-        if max(self._lengths) < span:
-            raise ValueError(f"shards hold at most {max(self._lengths)} tokens, need {span} per batch")
+        if min(self._lengths) < span:
+            raise ValueError(f"a shard holds only {min(self._lengths)} tokens, need {span} per batch")
 
     # -- shard access -------------------------------------------------------------
     def _array(self, idx: int) -> np.ndarray:

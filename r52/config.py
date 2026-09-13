@@ -226,6 +226,9 @@ class TrainConfig:
     adam_betas_head: tuple[float, float] = (0.5, 0.95)
     adam_betas_scalar: tuple[float, float] = (0.9, 0.99)
     adam_eps: float = 1e-10
+    # torch.optim.Adam (modded-nanogpt) always bias-corrects; mlx's AdamW defaults it OFF,
+    # which is a ~2.4x larger step for the first ~20 steps at betas=(0.5, 0.95).
+    adam_bias_correction: bool = True
     adam_wd_embed: float = 0.0
     adam_wd_vembed: float = 0.025
     adam_wd_head: float = 0.75

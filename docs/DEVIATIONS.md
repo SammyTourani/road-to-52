@@ -1250,3 +1250,12 @@ skip" — so it will skip rebuilding it as-is. The 50k-conversation set is not w
 smaller than documented; the planner should decide whether to accept it or clear
 `data/sft/smol-smoltalk` before the first `scripts/queue.sh` run so `prep-sft-data` rebuilds
 it at the documented size.
+
+# Review fixes (2026-09-13, adversarial review of the training core)
+
+- **C1 (critical, operational):** the periodic validation is the *first* 262,144 tokens of the split, which measures ~0.094 nats easier than the full 10,485,760-token split on `models/gpt2-mlx` (3.3536 vs 3.4471). `--target-val-loss` compared against it and broke out of the loop mid-plateau, skipping the cooldown. Fixes: the trainer now confirms on the full split before stopping (`event: val_full`), and `configs/gpt2_124m_mac.yaml` disables early stopping; the live Rung 0 run is resumed from its step-250 checkpoint with early stopping off.
+- **M2:** the config's "±0.004 nats" was the i.i.d.-token standard error; the honest SE of the 128-batch prefix mean is ~0.04 nats and the offset is a bias, not noise. Periodic val is for curve shape only; reported numbers always come from `scripts/eval.sh` on the full split.
+- **M3:** `mlx.optimizers.AdamW` defaults `bias_correction=False` (torch's Adam corrects) → ~2.4× larger AdamW steps for the first ~20 steps. New `TrainConfig.adam_bias_correction` (default `True`); the live run keeps `false` so its resume is semantically identical.
+- **m4:** the bf16 training-loss log-sum-exp bias is −5.2e-3 nats on real logits (−5.2e-4 was on random logits); training loss only, validation is fp32.
+- **m5:** `mlx.optimizers.Muon` applies `weight_decay` *coupled* (added to the gradient before Newton–Schulz), unlike modded-nanogpt's decoupled decay; keep `muon_weight_decay: 0.0`.
+- **m7–m10:** shard-length check uses the shortest shard; checkpoint staging dir renamed `.step_*.tmp` (outside the `step_*` glob, avoids a SIGTERM race on `best/`); HellaSwag `n_end` and CORE `schema` slice guards for degenerate truncation.

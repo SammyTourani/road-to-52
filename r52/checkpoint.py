@@ -53,7 +53,7 @@ def save_checkpoint(
 ) -> Path:
     """Write one checkpoint directory. Returns the directory path."""
     out = Path(path)
-    tmp = out.with_name(out.name + ".tmp")
+    tmp = out.with_name("." + out.name + ".tmp")  # leading dot: never matches the step_* glob
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
