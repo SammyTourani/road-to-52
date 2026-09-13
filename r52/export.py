@@ -106,7 +106,32 @@ def model_config_to_mlx_lm(cfg: Config) -> dict[str, Any]:
     return out
 
 
-def _fetch_tokenizer(out_dir: Path, model_max_length: int = 1024) -> bool:
+def _copy_r52_tokenizer(spec: str, out_dir: Path, model_max_length: int = 1024) -> bool:
+    """Copy an :mod:`r52.tokenizer_train` directory's files into an export.
+
+    Our own BPE already carries the nine special tokens *inside* its vocabulary and already
+    ships a ``tokenizer_config.json`` with the Jinja ``chat_template``, so unlike the GPT-2
+    path there is nothing to patch: the two files are copied verbatim and ``mlx_lm`` loads
+    them.  ``meta.json`` comes along so an exported model can be traced back to the text its
+    vocabulary was fitted on.
+    """
+    src = Path(spec)
+    if not (src / "tokenizer.json").is_file():
+        return False
+    out_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src / "tokenizer.json", out_dir / "tokenizer.json")
+    for name in ("tokenizer_config.json", "meta.json"):
+        if (src / name).is_file():
+            shutil.copyfile(src / name, out_dir / name)
+    cfg_path = out_dir / "tokenizer_config.json"
+    if cfg_path.is_file():
+        cfg = json.loads(cfg_path.read_text())
+        cfg["model_max_length"] = int(model_max_length)
+        cfg_path.write_text(json.dumps(cfg, indent=2))
+    return True
+
+
+def _fetch_tokenizer(out_dir: Path, model_max_length: int = 1024, spec: str = "gpt2") -> bool:
     """Copy GPT-2 tokenizer files into ``out_dir`` and install the chat format.
 
     Returns ``False`` if no tokenizer could be fetched (offline and nothing cached).
@@ -115,6 +140,8 @@ def _fetch_tokenizer(out_dir: Path, model_max_length: int = 1024) -> bool:
     ``mlx_lm.generate --apply-chat-template`` / ``mlx_lm.chat`` / ``mlx_lm.server`` work on
     every export -- base models included, where the tokens simply never fire.
     """
+    if spec not in ("", "gpt2"):
+        return _copy_r52_tokenizer(spec, out_dir, model_max_length)
     try:
         from huggingface_hub import hf_hub_download
     except ImportError:  # pragma: no cover
@@ -156,8 +183,9 @@ def export_checkpoint(
     if conf["model_type"] == "r52gpt":
         shutil.copyfile(Path(__file__).parent / "mlx_plugin" / "r52gpt.py", out / "r52gpt.py")
 
-    if tokenizer and not _fetch_tokenizer(out, cfg.model.block_size):
-        print(f"[r52.export] warning: could not fetch GPT-2 tokenizer files into {out}")
+    tok_spec = getattr(cfg.data, "tokenizer", "gpt2")
+    if tokenizer and not _fetch_tokenizer(out, cfg.model.block_size, tok_spec):
+        print(f"[r52.export] warning: could not fetch {tok_spec} tokenizer files into {out}")
     return out
 
 
@@ -174,7 +202,7 @@ def export_model(model: GPT, out_dir: str | Path, cfg: Config, dtype: str = "bfl
     if conf["model_type"] == "r52gpt":
         shutil.copyfile(Path(__file__).parent / "mlx_plugin" / "r52gpt.py", out / "r52gpt.py")
     if tokenizer:
-        _fetch_tokenizer(out, cfg.model.block_size)
+        _fetch_tokenizer(out, cfg.model.block_size, getattr(cfg.data, "tokenizer", "gpt2"))
     return out
 
 

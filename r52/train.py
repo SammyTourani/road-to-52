@@ -126,15 +126,26 @@ class Trainer:
 
     # -- setup helpers -------------------------------------------------------------
     def _bytes_per_token(self) -> float | None:
-        """Bytes/token of the validation corpus (``None`` for synthetic data)."""
+        """Bytes/token of the validation corpus (``None`` for synthetic data).
+
+        ``data.tokenizer`` other than ``'gpt2'`` (``docs/ABLATIONS.md`` Axis 3) means the
+        shards hold ids from our own BPE, so the decode that turns tokens back into bytes has
+        to use that tokenizer or the reported bits-per-byte is meaningless.
+        """
         if self.cfg.data.source != "fineweb":
             return None
         path = Path(self.cfg.data.data_dir) / self.cfg.data.val_file
         if not path.exists():
             return None
+        tok = None
+        if getattr(self.cfg.data, "tokenizer", "gpt2") not in ("", "gpt2"):
+            from .tokenizer_train import load_tokenizer
+
+            tok = load_tokenizer(self.cfg.data.tokenizer)
         n = self.val_loader.tokens
         return val_bytes_per_token(
-            load_shard(path), n, Path(self.cfg.data.data_dir) / ".bpb_cache.json", "val"
+            load_shard(path), n, Path(self.cfg.data.data_dir) / ".bpb_cache.json", "val",
+            tokenizer=tok,
         )
 
     def _build_step_fn(self) -> None:

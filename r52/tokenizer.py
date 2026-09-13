@@ -121,12 +121,23 @@ def val_bytes_per_token(
     cache_path: str | Path | None = None,
     cache_key: str = "val",
     chunk: int = 1 << 20,
+    tokenizer=None,
 ) -> float:
     """Mean UTF-8 **bytes per token** over the first ``n_tokens`` of ``tokens``.
 
     Cached in ``cache_path`` (a small JSON file) keyed by ``f"{cache_key}:{n_tokens}"``,
     because decoding 10.5M tokens takes a few seconds and the value never changes.
+
+    ``tokenizer`` defaults to GPT-2's BPE; the ablation lab passes an
+    :class:`r52.tokenizer_train.R52Tokenizer` instead, because bytes/token is a property of
+    the (corpus, tokenizer) pair and decoding a 32K-BPE shard with GPT-2's vocabulary would
+    silently produce nonsense.  The cache key is namespaced by the tokenizer's name so two
+    tokenizers cannot share a cached value.
     """
+    tok = tokenizer if tokenizer is not None else _tokenizer()
+    tok_name = getattr(tok, "kind", "gpt2")
+    if tok_name != "gpt2":
+        cache_key = f"{cache_key}:{getattr(tok, 'name', tok_name)}"
     key = f"{cache_key}:{int(n_tokens)}"
     cache: dict[str, float] = {}
     p = Path(cache_path) if cache_path else None
@@ -138,7 +149,6 @@ def val_bytes_per_token(
         if key in cache:
             return float(cache[key])
 
-    tok = _tokenizer()
     n = min(int(n_tokens), int(tokens.size))
     total = 0
     for start in range(0, n, chunk):

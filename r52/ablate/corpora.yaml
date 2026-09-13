@@ -1,0 +1,153 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# The corpus registry for the data-ablation lab (docs/ABLATIONS.md, Axis 1).
+#
+# Every row was verified against the live Hugging Face API on 2026-09-13 with
+# `HfApi().dataset_info()` + `list_repo_files()`; `revision` is the dataset repo's `sha` at
+# that moment, and `text_key` was read out of the actual file (parquet footer schema, or the
+# first JSON line of the first `.jsonl.zst` shard) -- not out of a dataset card.
+#
+# Fields
+# ------
+# repo_id        Hugging Face dataset id.
+# revision       Commit sha pinned at verification time; streaming uses `hf://...@<revision>`
+#                so a re-run months later reads the same bytes.
+# config         The declared config name, when the repo has one (documentation only -- the
+#                loader addresses files directly, see `path_prefix`).
+# format         `parquet` or `json` (the `datasets` builder used for streaming).
+# path_prefix    Every repo file under this prefix is a data file, in sorted order.
+# text_key       The column holding the document text.
+# license        The repo's license tag.
+# interleave     How many files to read round-robin at once.  1 = read files in order (fine
+#                for a repo whose shards are already globally shuffled).  >1 is required when
+#                the repo is laid out by *source*, because the first shards would otherwise be
+#                one topic -- see the `dolma3` note.
+# file_order     `sorted` or `shuffled` (seeded by `file_seed`).
+# min_chars      Documents shorter than this are skipped (drops empty/near-empty rows).
+# notes          Anything a reader needs before trusting a number produced from this corpus.
+#
+# Exclusion check (docs/PLAN.md §5): none of these is on the Claude-derived exclude list, and
+# none is `nvidia/Nemotron-ClimbMix` (CC-BY-NC).  All six are commercially usable.
+
+verified: "2026-09-13"
+
+corpora:
+
+  fineweb:
+    repo_id: HuggingFaceFW/fineweb
+    revision: 9bb295ddab0e05d785b879661af7260fed5140fc
+    config: sample-10BT
+    format: parquet
+    path_prefix: sample/10BT/
+    text_key: text
+    license: odc-by
+    interleave: 1
+    file_order: sorted
+    min_chars: 64
+    published_rank: 4
+    notes: >-
+      The Rung 0 baseline corpus (docs/ABLATIONS.md Axis 1). 2.1 GB per parquet file, 1,049
+      row groups of ~7 MB each, so streaming stops cheaply. research/03 §1.1: beats C4, Dolma
+      1.6, Pile, SlimPajama, RefinedWeb and RPv2 at 1.8B/350B, and is superseded on
+      quality-per-token by every other row here.
+
+  fineweb-edu:
+    repo_id: HuggingFaceFW/fineweb-edu
+    revision: 87f09149ef4734204d70ed1d046ddc9ca3f2b8f9
+    config: sample-10BT
+    format: parquet
+    path_prefix: sample/10BT/
+    text_key: text
+    license: odc-by
+    interleave: 1
+    file_order: sorted
+    min_chars: 64
+    published_rank: 3
+    notes: >-
+      Llama-3-70B-annotated classifier (F1 82%), drops 92% of FineWeb. 2.15 GB per file, 726
+      row groups of ~8 MB. research/03 §1.3: loses to DCLM by 7.0 CORE / 13.5 MMLU at 0.28T
+      matched tokens.
+
+  dclm:
+    repo_id: mlfoundations/dclm-baseline-1.0
+    revision: a3b142c183aebe5af344955ae20836eb34dcf69b
+    config: null
+    format: json
+    path_prefix: global-shard_01_of_10/local-shard_0_of_10/
+    text_key: text
+    license: cc-by-4.0
+    interleave: 1
+    file_order: sorted
+    min_chars: 64
+    published_rank: 1
+    notes: >-
+      NOT parquet -- the repo ships `shard_*_processed.jsonl.zst` (141-240 MB each, 27,840
+      files over 10 global x 10 local shards); `docs/ABLATIONS.md`'s "first parquet shards"
+      is wrong about the format, not about the slice. We take the first local shard of the
+      first global shard, which DCLM's own BFF-deduplicated pipeline already shuffled.
+      research/03 §1.3: +7.0 CORE over FineWeb-Edu at 0.28T matched tokens; strongest
+      permissive English web corpus. Needs `zstandard`.
+
+  dolma3:
+    repo_id: allenai/dolma3_mix-150B-1025
+    revision: afa92bfb22366821c5e6cd427cdd036b34b713ef
+    config: default
+    format: json
+    path_prefix: "data/"
+    text_key: text
+    license: odc-by
+    interleave: 24
+    file_order: shuffled
+    file_seed: 1337
+    min_chars: 64
+    published_rank: 5
+    notes: >-
+      THE ONE THAT NEEDS CARE. The repo is laid out by source and topic -- 6,082 shards under
+      66 directories (`common_crawl-<topic>`, `olmocr_science_pdfs-<topic>`, `stack_edu-<lang>`,
+      `finemath-3plus`, `dolma1_7-wiki-en`, `rpj-proofpile-arxiv`). Reading files in sorted
+      order would hand you `common_crawl-adult_content` and nothing else. So the file list is
+      shuffled with a fixed seed and 24 files are read round-robin, which samples the mix
+      instead of one corner of it. The realised mixture is still only uniform *by file*, not
+      by Dolma 3's published token weights -- the manifest records the exact file list so the
+      slice is reproducible and the caveat is checkable. research/03 §1.1: no published
+      ablation ranks Dolma 3 against DCLM / FineWeb-Edu / Nemotron-CC, so its expected
+      position is UNVERIFIED. Needs `zstandard`.
+
+  ultra-fineweb:
+    repo_id: openbmb/Ultra-FineWeb
+    revision: 02c85641e3d19a854be2e09139c25adaa9518063
+    config: default
+    format: parquet
+    path_prefix: data/ultrafineweb_en/
+    text_key: content
+    license: apache-2.0
+    interleave: 1
+    file_order: sorted
+    min_chars: 64
+    published_rank: 2
+    notes: >-
+      The text column is `content`, not `text`. WARNING: the English parts are 1.30 GB with
+      only 10 row groups, i.e. ~225 MB per row group, so the smallest possible streaming read
+      is ~200 MB -- an order of magnitude more than any other row here. Budget for that.
+      research/03 §1.3: 1.2B/100B avg 45.891 vs FineWeb-Edu 44.560 vs FineWeb 42.278; the
+      best Apache-2.0 filtered web corpus.
+
+  finepdfs-edu:
+    repo_id: HuggingFaceFW/finepdfs-edu
+    revision: 9cfabe2127faca99b3d5c4dc6d1fcb397399ebde
+    config: eng_Latn
+    format: parquet
+    path_prefix: data/eng_Latn/train/
+    text_key: text
+    license: odc-by
+    interleave: 1
+    file_order: sorted
+    min_chars: 64
+    published_rank: 6
+    notes: >-
+      English split of FinePDFs-Edu (Qwen3-235B-annotated classifier, globally deduplicated).
+      3.0-3.2 GB per file, 237 row groups of ~27 MB. docs/ABLATIONS.md blends this at <=25%
+      into FineWeb-Edu rather than training on it neat -- research/03 §1.1 is explicit that
+      the gain comes from mixing and that PDFs should stay under 25% of a mix. Preparing it
+      neat is supported and is what `r52.ablate.matrix` does for the *ingredient*; the blend
+      cell is built by `prepare_corpus.py --blend`.

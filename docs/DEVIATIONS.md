@@ -629,3 +629,189 @@ exact pin, not a floor). Verified harmless for the eval stack: `lm_eval` 0.4.13 
 tabulate constraint, imports cleanly, and `lm_eval.utils.make_table` works; the full suite
 (`pytest -q`, 259 tests) passes afterwards. Noted because a future `uv pip install` that
 tries to raise `tabulate` again will conflict with `reasoning-gym`.
+
+---
+
+# Deviations — ablation builder
+
+Builder: the data-ablation lab (`docs/ABLATIONS.md`: `r52/ablate/`, `r52/tokenizer_train.py`,
+`scripts/prepare_corpus.py`, `scripts/ablate.sh`, `configs/ablations/`). Date: 2026-09-13.
+Machine: Mac Mini M4, 16 GB, macOS 26.5.2, MLX 0.32.2, `tokenizers` 0.23.2, `datasets` 5.0.1,
+pyarrow 25.0.1. Every corpus claim below was checked against the live Hugging Face API on
+2026-09-13, not against a dataset card.
+
+## A1. nanochat's split pattern means something *different* in Hugging Face `tokenizers`
+
+`research/02` §Stage 3 records nanochat's pre-tokenizer pattern — GPT-4's, with the digit run
+narrowed to `\p{N}{1,2}` — and that narrowing is the whole reason a 32K vocabulary does not
+waste entries on numbers. nanochat writes it with **possessive quantifiers** (`\p{N}{1,2}+`,
+`\p{L}++`, `[\r\n]*+`, `\s++$`) because `rustbpe` compiles it with the Rust `fancy-regex`
+crate.
+
+`tokenizers` 0.23.2 accepts the identical string and silently means something else by it.
+Measured (`pre_tokenizers.Split(Regex(...), behavior="isolated")` on `"1234"`):
+
+| pattern | pre-tokens of `1234` |
+|---|---|
+| nanochat's, verbatim (`\p{N}{1,2}+`) | `['1234']` — **the digit split does not happen** |
+| possessive markers removed (`\p{N}{1,2}`) | `['12', '34']` — nanochat's intent |
+
+Its engine reads `{1,2}+` as `({1,2})+` rather than as a possessive `{1,2}`. So
+`r52.tokenizer_train.SPLIT_PATTERN` drops every possessive marker and is otherwise
+character-for-character nanochat's. `tests/test_tokenizer_train.py::
+test_digits_split_into_runs_of_at_most_two` is the regression guard. **Anyone porting a
+rustbpe/tiktoken pattern into `tokenizers` should assume it changes meaning until tested.**
+
+## A2. Our 32K specials live *inside* the vocabulary, not in a padded gap
+
+The GPT-2 path puts `<|endoftext|>` at 50256 and the eight chat tokens in the spare ids
+50257–50303 of a vocabulary padded to 50304 (`r52/chat_template.py`). That trick exists
+because GPT-2's BPE is a fixed 50,257 entries we do not control.
+
+We control ours, so the nine specials (`<|endoftext|>` + the same eight, same order) take the
+**top nine ids** of the 32,768: `eot = 32759`, `<|bos|> = 32760`, `<|pad|> = 32767`. 32,768 is
+already a multiple of 128, so there is no padding gap and `model.vocab_size ==
+tokenizer.n_vocab` exactly. A training text too small to fill the vocabulary is padded with
+reserved `<|unused_N|>` ids so the special ids are a function of `vocab_size` alone and never
+of how much text happened to be available — a checkpoint's ids must not depend on that.
+
+Consequence for the planner: `r52/chat_template.py`'s module-level `BOS`/`EOT`/... constants
+are GPT-2-specific. Everything in the ablation lab reads `tokenizer.eot` /
+`tokenizer.special_ids` instead. A future chat model trained on our own BPE will need
+`render()` to take its ids from the tokenizer object rather than from those constants; that is
+a post-training change, deliberately not made here.
+
+## A3. `encode_ordinary` needs a *second* tokenizer object, because `add_special_tokens=False` does not do what it says
+
+In `tokenizers`, an added token's spelling is matched in the input text whatever
+`add_special_tokens` is set to. Measured: `tok.encode("a <|endoftext|> b",
+add_special_tokens=False).ids` still contains the special id. Since `encode_ordinary`'s
+contract (`r52/tokenizer.py`) is "**no** special token ever produced" — the guard that stops a
+user turn from forging a turn boundary — `R52Tokenizer` keeps a clone of the tokenizer with
+`added_tokens` stripped out of its JSON and encodes ordinary text with that.
+
+`decode_bytes` likewise does **not** go through `tok.decode().encode()`: the ByteLevel decoder
+runs `String::from_utf8_lossy`, so a token run that starts or ends mid-character gains
+replacement bytes, which would corrupt a bits-per-byte measurement. It uses a per-id byte
+table built by inverting the GPT-2 bytes-to-unicode alphabet, which is exact.
+
+## A4. DCLM ships `.jsonl.zst`, not parquet — and needed a new dependency
+
+`docs/ABLATIONS.md` Axis 1 says "`mlfoundations/dclm-baseline-1.0`, first parquet shards".
+The repo has no parquet: it is 27,840 `shard_*_processed.jsonl.zst` files (141–240 MB each)
+under `global-shard_NN_of_10/local-shard_N_of_10/`. The *slice* the spec names is right, the
+format is not. `allenai/dolma3_mix-150B-1025` is `.jsonl.zst` too.
+
+`datasets` cannot stream `.zst` without `zstandard`, which was not installed. Added to
+`pyproject.toml` (BSD-3-Clause), along with an explicit `tokenizers` pin — it was only ever a
+transitive dependency of mlx-lm and we now use it directly.
+
+## A5. Dolma 3 cannot be read in file order — it is laid out by topic, and adult content sorts first
+
+`allenai/dolma3_mix-150B-1025` is 6,082 shards under 66 directories named by source and topic
+(`common_crawl-<topic>`, `olmocr_science_pdfs-<topic>`, `stack_edu-<lang>`, `finemath-3plus`,
+`dolma1_7-wiki-en`, `rpj-proofpile-arxiv`). Taking "the first shards" alphabetically gives
+`common_crawl-adult_content-0014` and nothing else — a slice that is neither Dolma 3 nor
+anything you would want to train on.
+
+`r52/ablate/corpora.yaml` therefore carries two fields the other five rows do not need:
+`file_order: shuffled` (seed 1337) and `interleave: 24`, and `iter_documents` reads 24 files
+round-robin. **The realised slice is uniform by *file*, not by Dolma 3's published token
+weights**, because shard sizes vary; `manifest.json` records the exact file list so the slice
+is reproducible and the caveat is checkable. A token-weighted Dolma 3 slice would need the
+published mixture table, which is not in the repo.
+
+## A6. Ultra-FineWeb: the column is `content`, and one row group is ~225 MB
+
+Two things read out of the live files rather than the card:
+
+* the text column of `openbmb/Ultra-FineWeb` is **`content`**, not `text`;
+* its English parquet parts are 1.30 GB with only **10 row groups**, i.e. ~225 MB each, where
+  FineWeb-Edu has 726 row groups of ~8 MB. Streaming reads a row group at a time, so the
+  *smallest possible* Ultra-FineWeb read is ~200 MB — an order of magnitude more than any
+  other corpus here, and the reason it was not exercised during this build (the download
+  budget for this session was 300 MB total).
+
+## A7. The evals are hard-wired to GPT-2's BPE, and `r52/eval/` was not to be touched
+
+`r52.eval.lm.LM.__init__` constructs a `GPT2Tokenizer` unconditionally and every eval reads
+`lm.tokenizer` from there; `r52.eval.val_loss.evaluate_val_loss` computes bytes-per-token
+through the same decoder. Correct for every model in the ladder, wrong for an Axis-3 model
+trained on our own 32K vocabulary, and the brief forbids editing `r52/eval/`.
+
+`r52/ablate/evals.py` therefore loads the same `LM`, **replaces `lm.tokenizer`**, and calls
+the same `evaluate_hellaswag` / `evaluate_core` / `evaluate_val_loss` functions, so there is
+still exactly one implementation of each metric. It refuses to run when the tokenizer's
+vocabulary and the checkpoint's output rows disagree, which is the failure this replacement
+could otherwise hide. bits-per-byte is computed in `evals.py` rather than by passing `array=`
+to `evaluate_val_loss`, because that call cannot be told which tokenizer to decode with.
+
+**If `r52/eval/` is ever opened again**, the clean fix is a `tokenizer=` argument on
+`LM.load`; this module would then shrink to a thin CLI.
+
+## A8. Four minimal edits outside the ablation tree
+
+| File | Change | Why unavoidable |
+|---|---|---|
+| `r52/config.py` | `DataConfig.tokenizer: str = "gpt2"`, plus `resolve_tokenizer()` called from `from_dict` and `apply_overrides` | The spec asks for the field. `model.vocab_size` is *derived* from the tokenizer directory's `meta.json`, because a vocabulary mismatch between shards and embedding table is silent corruption rather than an error. A missing directory is left alone so the tokenizer loader raises the specific message. |
+| `r52/tokenizer.py` | `val_bytes_per_token(..., tokenizer=None)`; the cache key is namespaced by the tokenizer's name | Bytes/token is a property of the *(corpus, tokenizer)* pair; decoding a 32K-BPE shard with GPT-2's vocabulary silently produces nonsense, and a shared cache key would let one tokenizer read the other's value. Default behaviour is unchanged. |
+| `r52/train.py` | `Trainer._bytes_per_token` passes the configured tokenizer (3 lines, in a setup helper — the core loop is untouched) | Without it a `data.tokenizer: <dir>` run reports a meaningless `val_bpb` in its own log. |
+| `r52/export.py` | `_fetch_tokenizer(..., spec)` + `_copy_r52_tokenizer()` | The deliverable is "export must write the HF `tokenizer.json` so mlx-lm loads it". Our tokenizer directory already contains `tokenizer.json` and a `tokenizer_config.json` with the chat template, so the new path copies two files; the GPT-2 path is byte-identical to before. Verified: `mlx_lm.tokenizer_utils.load()` loads the export, round-trips text identically to `R52Tokenizer`, and `apply_chat_template` renders `<\|bos\|><\|user_start\|>hi<\|user_end\|><\|assistant_start\|>`. |
+
+All 326 pre-existing tests still pass.
+
+## A9. `--max-tokens` overshoots by up to one optimizer step, which matters on the tokenizer axis
+
+`r52.train` checks the token budget *before* a step, so a run stops at the first step at or
+beyond `--max-tokens` (measured: `--max-tokens 20000` with a 4,096-token step ends at 20,480).
+On the corpus and arch axes every cell shares `tokens_per_step`, so all of them overshoot
+identically and "matched tokens" survives. On the **tokenizer** axis the budgets differ per
+cell (they are derived from bytes), so the two cells can differ by up to one step —
+65,536 tokens out of ~90M, i.e. 0.07%. Recorded rather than worked around; `train.tokens` in
+each results JSON is the number actually trained on.
+
+## A10. FinePDFs-Edu is a blend cell, which needed a mixer in `prepare_corpus.py`
+
+`docs/ABLATIONS.md` Axis 1 lists FinePDFs-Edu as "≤25% blended into FineWeb-Edu", and
+`research/03` §1.1 is explicit that the gain comes from mixing and that PDFs should stay under
+25%. So the sixth corpus cell is `fineweb-edu+finepdfs-edu25`, built by
+`prepare_corpus.py --corpus fineweb-edu --blend finepdfs-edu:0.25`.
+
+The mixer samples sources by **token deficit**, not per document, for the reason P5 measured
+on the midtrain mixture: these corpora differ 2–3× in document length, and per-document
+sampling delivers shares proportional to `weight × mean_length`. Verified in
+`tests/test_ablate.py::test_blend_hits_its_token_share` with deliberately 10×-different
+document lengths: realised 0.25 ± 0.03.
+
+## A11. Two of "the six cheapest CORE tasks" are noise at this scale — planner decision
+
+`docs/ABLATIONS.md` asks for "the 6 cheapest CORE tasks". Measured against the eval bundle,
+cost (`items × (few-shot + 1)` forward rows) ranks them: `copa` 100, `winograd` 273,
+`bigbench_repeat_copy_logic` 352, `openbook_qa` 500, `agi_eval_lsat_ar` 920, `winogrande`
+1,267 — versus 110,462 for the 10-shot `hellaswag` task alone. That set is the shipped
+default (`matrix.CORE6`).
+
+But `bigbench_repeat_copy_logic` is 32 items scored by greedy exact match and
+`agi_eval_lsat_ar` is LSAT analytical reasoning; both sit at or below their random baselines
+for 12–35M-parameter models, so two of the six contribute variance instead of ranking
+information. `matrix.CORE6_ALTERNATIVE` swaps them for `lambada_openai` and
+`hellaswag_zeroshot` at ~15× the forward rows. **The planner should pick one before the corpus
+axis runs**; changing it afterwards invalidates cross-cell comparability.
+
+## A12. Measured: our 32K BPE packs 0.39% more bytes per token than GPT-2's 50K
+
+Trained on 50 MB of FineWeb-Edu, measured on a held-out 2.68 MB of the same stream
+(`python -m r52.tokenizer_train --name fineweb-edu-32k --corpus fineweb-edu --bytes 50000000
+--vocab-size 32768 --compare-gpt2`, 6.0 s):
+
+| tokenizer | vocab | tokens for 2,677,230 bytes | bytes/token |
+|---|---|---|---|
+| ours | 32,768 | 576,158 | **4.6467** |
+| GPT-2 | 50,257 | 578,400 | 4.6287 |
+
+So the Axis-3 premise "a smaller, better-fitted vocabulary buys fewer tokens for the same
+text" is **true but small** on English educational web text — which is close to what GPT-2's
+BPE was fitted on in the first place. The real lever at these widths is the head: at `d=384`
+a 32,768-row `lm_head` is 12.6M parameters against 19.3M, and the same saving repeats on
+`wte` and the value-embedding table. The axis should be read as "is a 35% cheaper vocabulary
+free?", not as "is it better compression?".

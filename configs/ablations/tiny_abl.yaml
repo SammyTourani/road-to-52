@@ -1,0 +1,98 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# The SCREENING proxy of the data-ablation lab (docs/ABLATIONS.md §"Scale and budget"):
+# 6 layers, d=384, seq 1024, 100M tokens -- one cell per evening.
+#
+# Parameter counts (vocab 50,304; `tests/test_ablate_configs.py` asserts them):
+#   non-embedding   10,616,847   <- the "~12M" the spec names
+#   N for 6N        29,933,583   (non-embedding + lm_head)
+#   total           68,567,055   (three vocab x d matrices dominate at this width)
+# With our own 32,768 vocabulary the head is 12.6M instead of 19.3M, which is one of the two
+# things the tokenizer axis is measuring.
+#
+# Optimizer hyper-parameters: identical provenance to configs/nano_30m.yaml -- modded-nanogpt's
+# record values rescaled for a 65,536-token batch by (65536/131072)**0.5 = 0.7071.  They are
+# NOT re-fit for this width on purpose: the corpus and tokenizer axes must differ only in
+# their data, and docs/PLAN.md §3.1 item 3 says the Muon optimum is a flat bowl anyway.  The
+# arch axis is where the LR is probed (muon-lr-0.035 / 0.07 cells).
+#
+# The `data:` block below is a runnable default (whatever is in data/corpora/fineweb-edu-gpt2);
+# every ablation cell overrides data_dir / train_glob / val_file / tokenizer from
+# r52/ablate/matrix.py, so editing it here changes only a manual run.
+name: tiny_abl
+
+model:
+  n_layer: 6
+  n_embd: 384
+  n_head: 6                  # head_dim = 64
+  vocab_size: 50304          # derived from data.tokenizer when that is not 'gpt2'
+  block_size: 1024
+  rope_base: 10000.0
+  softcap: 15.0
+  qk_norm: true
+  use_value_embeds: true
+  n_value_embeds: 3
+  value_embed_share: true
+  use_unet_skips: true
+  mlp: relu2
+  mlp_ratio: 4.0
+  precision: mixed
+  grad_checkpoint: false
+
+data:
+  source: fineweb
+  tokenizer: gpt2
+  data_dir: data/corpora/fineweb-edu-gpt2
+  train_glob: "fineweb-edu_train_*.bin"
+  val_file: fineweb-edu_val_000000.bin
+  val_tokens: 1048576        # the ablation corpora hold a 1-2M-token val split, not 10.5M
+
+train:
+  micro_batch: 4             # 4 x 1024 = 4,096 tokens per fwd/bwd; 16 accumulation steps.
+                             # Same micro-batch as nano_30m, which measured 4.66 GiB peak at
+                             # d=512; this is smaller everywhere except the logits tensor,
+                             # which is identical (micro_batch x block_size x vocab).
+                             # seq-512 cells keep tokens_per_step and use 32 accum steps.
+  tokens_per_step: 65536     # 2^16
+
+  muon_lr: 0.03536           # 0.05   * 0.7071
+  muon_momentum: 0.95
+  muon_weight_decay: 0.0
+  muon_nesterov: true
+  muon_ns_steps: 5
+
+  adam_lr_embed: 0.42426     # 0.6    * 0.7071
+  adam_lr_vembed: 0.42426
+  adam_lr_head: 0.005657     # 0.008  * 0.7071
+  adam_lr_scalar: 0.028284   # 0.04   * 0.7071
+  adam_betas_embed: [0.8, 0.95]
+  adam_betas_vembed: [0.75, 0.95]
+  adam_betas_head: [0.5, 0.95]
+  adam_betas_scalar: [0.9, 0.99]
+  adam_eps: 1.0e-10
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  adam_wd_scalar: 0.0
+
+  warmup_steps: 100
+  cooldown_frac: 0.4
+  final_lr_frac: 0.15
+  grad_clip: 0.0
+
+  max_tokens: 100000000      # 0.1B tokens -> 1,525 optimizer steps (~3 h at ~9k tok/s)
+  max_hours: 0.0
+  target_val_loss: 0.0
+
+  log_interval: 25
+  val_interval: 250
+  val_max_batches: 64        # 64 x 4 x 1024 = 262,144 tokens
+  val_micro_batch: 4
+  ckpt_interval: 250
+  keep_last: 2
+  out_dir: runs
+
+  memory_limit_gb: 6.0
+  cache_limit_gb: 1.0
+  seed: 1337
+  compile: true

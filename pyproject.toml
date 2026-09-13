@@ -16,6 +16,14 @@ dependencies = [
   "huggingface_hub>=0.30",
   "datasets>=3",
   "lm_eval>=0.4.13",
+  # -- data-ablation lab (r52/ablate, r52/tokenizer_train.py) -------------------------
+  # tokenizers: trains our own byte-level BPE and writes the `tokenizer.json` mlx-lm
+  #   loads (Apache-2.0; docs/PLAN.md §5's tokenizer choice). Already a transitive
+  #   dependency of mlx-lm/transformers -- pinned here because we use it directly.
+  "tokenizers>=0.20",
+  # zstandard: `mlfoundations/dclm-baseline-1.0` and `allenai/dolma3_mix-150B-1025` ship
+  #   `.jsonl.zst`; `datasets` cannot stream them without it (BSD-3-Clause).
+  "zstandard>=0.22",
   # -- post-training (r52/posttrain) --------------------------------------------------
   # reasoning-gym: procedural RLVR environments + their verifiers (Apache-2.0);
   #   docs/PLAN.md §5's RL environment choice. Pulls matplotlib/sympy/arckit for the

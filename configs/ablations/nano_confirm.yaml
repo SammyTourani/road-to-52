@@ -1,0 +1,90 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# The CONFIRMATION proxy of the data-ablation lab (docs/ABLATIONS.md §"Scale and budget"):
+# the `nano_30m` shape on 200M tokens, run on the top 2-3 cells that `tiny_abl` screened.
+#
+# The model block is byte-identical to configs/nano_30m.yaml -- 8 layers, d=512, seq 1024 --
+# so a confirmation number here and Run A's headline number are the same architecture, and
+# the only difference between them is the corpus and the token budget.  The optimizer block
+# is identical too (modded-nanogpt's record values x 0.7071 for the 65,536-token batch; see
+# configs/nano_30m.yaml for the full provenance).
+#
+# Measured throughput at this shape on this machine: 6,519 tok/s at 4.66 GiB peak
+# (r52.bench, 2026-09-13), so 200M tokens is ~8.5 h of background compute per cell. Two or
+# three cells is two or three nights; do not queue more than that behind a headline run.
+#
+# `data:` is overridden per cell by r52/ablate/matrix.py -- run the axis with
+#   scripts/ablate.sh corpus --config configs/ablations/nano_confirm.yaml
+name: nano_confirm
+
+model:
+  n_layer: 8
+  n_embd: 512
+  n_head: 8                  # head_dim = 64
+  vocab_size: 50304          # derived from data.tokenizer when that is not 'gpt2'
+  block_size: 1024
+  rope_base: 10000.0
+  softcap: 15.0
+  qk_norm: true
+  use_value_embeds: true
+  n_value_embeds: 3
+  value_embed_share: true
+  use_unet_skips: true
+  mlp: relu2
+  mlp_ratio: 4.0
+  precision: mixed
+  grad_checkpoint: false
+
+data:
+  source: fineweb
+  tokenizer: gpt2
+  data_dir: data/corpora/fineweb-edu-gpt2
+  train_glob: "fineweb-edu_train_*.bin"
+  val_file: fineweb-edu_val_000000.bin
+  val_tokens: 1048576
+
+train:
+  micro_batch: 4             # 4 x 1024 = 4,096 tokens per fwd/bwd; 16 accumulation steps
+  tokens_per_step: 65536     # 2^16
+
+  muon_lr: 0.03536           # 0.05   * 0.7071
+  muon_momentum: 0.95
+  muon_weight_decay: 0.0
+  muon_nesterov: true
+  muon_ns_steps: 5
+
+  adam_lr_embed: 0.42426     # 0.6    * 0.7071
+  adam_lr_vembed: 0.42426
+  adam_lr_head: 0.005657     # 0.008  * 0.7071
+  adam_lr_scalar: 0.028284   # 0.04   * 0.7071
+  adam_betas_embed: [0.8, 0.95]
+  adam_betas_vembed: [0.75, 0.95]
+  adam_betas_head: [0.5, 0.95]
+  adam_betas_scalar: [0.9, 0.99]
+  adam_eps: 1.0e-10
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  adam_wd_scalar: 0.0
+
+  warmup_steps: 100
+  cooldown_frac: 0.4
+  final_lr_frac: 0.15
+  grad_clip: 0.0
+
+  max_tokens: 200000000      # 0.2B tokens -> 3,051 optimizer steps (~8.5 h at 6,519 tok/s)
+  max_hours: 0.0
+  target_val_loss: 0.0
+
+  log_interval: 25
+  val_interval: 250
+  val_max_batches: 64        # 64 x 4 x 1024 = 262,144 tokens
+  val_micro_batch: 4
+  ckpt_interval: 250
+  keep_last: 2
+  out_dir: runs
+
+  memory_limit_gb: 6.0
+  cache_limit_gb: 1.0
+  seed: 1337
+  compile: true

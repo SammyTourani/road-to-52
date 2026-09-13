@@ -9,6 +9,7 @@ tokens, steps, seconds, hours, GiB.
 from __future__ import annotations
 
 import dataclasses
+import json
 import math
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
@@ -23,6 +24,7 @@ __all__ = [
     "TrainConfig",
     "apply_overrides",
     "load_config",
+    "resolve_tokenizer",
 ]
 
 # --------------------------------------------------------------------------------------
@@ -164,6 +166,15 @@ class DataConfig:
 
     source: str = "fineweb"
     """``'fineweb'`` (llm.c ``.bin`` shards) or ``'synthetic'`` (deterministic noise, tests)."""
+    tokenizer: str = "gpt2"
+    """``'gpt2'`` (tiktoken, :mod:`r52.tokenizer`) or a directory written by
+    :mod:`r52.tokenizer_train` (``data/tokenizers/<name>``).
+
+    Added by the ablation builder for ``docs/ABLATIONS.md`` Axis 3.  ``ModelConfig.vocab_size``
+    is **derived** from it whenever it is not ``'gpt2'`` -- see :func:`resolve_tokenizer` --
+    because a vocabulary mismatch between the shards and the embedding table is silent
+    corruption, not an error.
+    """
     data_dir: str = "data/fineweb10B-gpt2"
     repo_id: str = "kjj0/fineweb10B-gpt2"
     train_glob: str = "fineweb_train_*.bin"
@@ -328,7 +339,7 @@ def from_dict(d: dict[str, Any]) -> Config:
     name = d.pop("name", "run")
     if d:
         raise ValueError(f"unknown top-level config keys: {sorted(d)}")
-    return Config(name=name, model=model, data=data, train=train)
+    return resolve_tokenizer(Config(name=name, model=model, data=data, train=train))
 
 
 def _filter(cls: type, d: dict[str, Any]) -> dict[str, Any]:
@@ -337,6 +348,22 @@ def _filter(cls: type, d: dict[str, Any]) -> dict[str, Any]:
     if unknown:
         raise ValueError(f"unknown {cls.__name__} keys: {sorted(unknown)}")
     return d
+
+
+def resolve_tokenizer(cfg: Config) -> Config:
+    """Derive ``model.vocab_size`` from ``data.tokenizer`` when it is not ``'gpt2'``.
+
+    ``data.tokenizer`` other than ``'gpt2'`` names a directory written by
+    :mod:`r52.tokenizer_train`, whose ``meta.json`` carries the exact vocabulary size.  A
+    missing directory is left alone so the tokenizer loader can raise the specific error.
+    """
+    spec = getattr(cfg.data, "tokenizer", "gpt2")
+    if not spec or spec == "gpt2":
+        return cfg
+    meta = Path(spec) / "meta.json"
+    if meta.is_file():
+        cfg.model.vocab_size = int(json.loads(meta.read_text())["padded_vocab_size"])
+    return cfg
 
 
 def load_config(path: str | Path) -> Config:
@@ -400,4 +427,4 @@ def apply_overrides(cfg: Config, overrides: list[str]) -> Config:
     cfg.model.__post_init__()
     cfg.data.__post_init__()
     cfg.train.__post_init__()
-    return cfg
+    return resolve_tokenizer(cfg)
