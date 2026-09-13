@@ -135,7 +135,7 @@ $2.43/h; formulas in `r52/ladder/ladder.py`). Local numbers use this machine's m
 
 | Rung | Hardware | Model | Tokens | Est. cost | Est. time | Beats (named target) | Status |
 |---|---|---|---|---|---|---|---|
-| **0** | Mac Mini M4 (this machine) | 124M dense, from scratch | ≤ 0.75B | **$0** | 3–6 days | **GPT-2 small** (OpenAI 2019): val loss ≤ 3.28 on FineWeb, HellaSwag ≥ 29.4%, CORE ≥ our gpt2 ref | building |
+| **0** | Mac Mini M4 (this machine) | 124M dense, from scratch | ≤ 0.75B | **$0** | ~3 days | **GPT-2 small** (OpenAI 2019) as *we* measured it with the same code: FineWeb val loss ≤ 3.447, HellaSwag acc_norm ≥ 29.4% (acc ≥ 28.5%), CORE ≥ the gpt2 reference (pending). Stretch: the speedrun bar, val loss ≤ 3.28 (llm.c's FineWeb-trained 124M) | **running** since 2026-09-13 |
 | 0a | Mac Mini M4 | ~35M "nano", full pipeline (pretrain→SFT→RL→chat) | 0.4B | $0 | ~1 day | pipeline proof, not a record | building |
 | **1** | 8×H100, ~2 h | ~1B dense (nanochat d24–d26 class) | ~20B | ~$50–100 | hours | **GPT-2 XL** (1.6B): CORE ≥ 0.2565 | planned; needs budget |
 | **2** | 8×H100, ~5 days | 3B dense **or** 30B-A3B MoE, Chinchilla-optimal | 60B | ~$815 spot | days | **Llama-1 7B** (Meta 2023, MMLU 35): MMLU/HellaSwag/ARC/GSM8K | planned; needs budget |
