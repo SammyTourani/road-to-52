@@ -95,6 +95,39 @@ it); (2) no MLX *pretraining* throughput benchmark has ever been published — e
    `mlx_lm.server`.
 6. The research corpus (`research/`) — six sourced reports on the 2026 landscape.
 
+### 3.1 The recipe we follow (from `research/06-frontier-recipe.md`, Appendix A)
+
+The five small-compute choices with the largest measured effect, and how each maps onto this repo:
+
+1. **Data quality and mixture is the only lever with a published 2×.** Filter harder than the
+   published recipes at small scale (optimal keep-rate ≈ top 3% at 1e20 FLOPs vs top 10% at 1e22);
+   spend effort on the classifier's positive seed. DataDecide shows corpus rankings at **150M
+   parameters predict the 1B winner ~80% of the time** — which makes this Mac Mini a legitimate
+   *data-ablation instrument*, not just a toy. → Rungs 0/0a fix the corpus for comparability; the
+   data-ablation lab is a Phase-4 deliverable.
+2. **A hybrid attention stack (3 cheap : 1 global) and a widened residual stream.** The residual
+   change (U-net / MUDD skips, value embeddings) is kernel-free and validated at 124M *and* at
+   frontier scale → in the Rung 0 model. The hybrid stack (Gated DeltaNet, ~2× data efficiency
+   at 7B in Olmo Hybrid) → Rung 1+.
+3. **Muon, plus a re-fit of LR and batch size.** Muon on 2-D matrices, AdamW on embeddings / head /
+   norms / anything vector-shaped; skip batch-size warmup under Muon; **split fused qkv before
+   orthogonalizing** (the most common from-scratch bug); the optimum is a flat bowl (√2 in LR,
+   +25% in batch) so don't over-sweep. → `r52/optim.py`.
+4. **Midtraining, not just pretraining.** A short (1–2% of tokens), LR-decaying, high-quality stage
+   that deliberately seeds instruction-following and thinking data into the *base* model;
+   decontaminate there specifically; average two midtrain seeds (Olmo 3 trick). → Phase 4.
+5. **Measure base-model pass@k before doing any RL.** High pass@128 ⇒ RL only sharpens; low ⇒ RL
+   can expand the boundary. Cheap headline results are mostly distillation, bounded by the
+   teacher; but SFT→RL ordering is worth ~5 points over either alone (Magistral: 65.4 / 65.8 /
+   70.7). → Phase 4 uses SFT → GRPO-family (DAPO-style: no KL, no std-norm, clip-higher,
+   token-level loss, dynamic sampling) on reasoning-gym, after a pass@k probe.
+
+Things we explicitly do **not** do at small scale: reproduce R1's RL setup (≥70k A100-hours at
+1.5B); carry forward someone else's LR/batch recipe after changing optimizer; chase validation
+loss alone (we always report HellaSwag/CORE next to loss); use FP8 before the bf16 run is correct.
+Frontier defaults that differ from the speedrun recipe at 124M (e.g. "no logit soft-capping",
+SwiGLU over ReLU²) are config flags, decided by measurement at our scale.
+
 ## 4. The ladder
 
 Costs use the calibrated ladder in `research/04 §B.5` (35% MFU on H100, spot $0.94/h, on-demand
