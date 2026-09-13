@@ -28,6 +28,13 @@ testpaths = ["tests"]
 line-length = 110
 target-version = "py312"
 
+[tool.ruff.lint]
+# Explicit rule set so `ruff check` is reproducible regardless of a user-level ruff config.
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E731"]  # single-expression lambdas are the clearest way to write schedule fixtures
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

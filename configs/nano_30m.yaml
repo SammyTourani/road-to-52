@@ -1,0 +1,87 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# Run A: ~25M non-embedding ("30M") params on ~0.4B tokens -- the end-to-end pipeline
+# proof, and the near-Chinchilla-optimal point for a 24 h budget on this machine
+# (research/05 §5.5: 30M @ 0.41B tokens = D/N ~ 13.6x).
+#
+# Optimizer hyper-parameters: identical provenance to configs/gpt2_124m_mac.yaml (see the
+# long note there), with one change -- our batch here is 65,536 tokens, HALF
+# modded-nanogpt's 131,072-token stage-1 batch, so every learning rate is scaled by
+#     (65536 / 131072) ** 0.5 = 0.7071
+# modded-nanogpt's own batch-size ladder uses exponent 0.5-0.6 for exactly this rescaling
+# (`lr_mul = (16/8)**0.6`, `(24/8)**0.5` in its TRAINING_STAGES).
+name: nano_30m
+
+model:
+  n_layer: 8
+  n_embd: 512
+  n_head: 8                  # head_dim = 64
+  vocab_size: 50304
+  block_size: 1024
+  rope_base: 10000.0
+  softcap: 15.0
+  qk_norm: true
+  use_value_embeds: true
+  n_value_embeds: 3
+  value_embed_share: true
+  use_unet_skips: true
+  mlp: relu2
+  mlp_ratio: 4.0
+  precision: mixed
+  grad_checkpoint: false
+
+data:
+  source: fineweb
+  data_dir: data/fineweb10B-gpt2
+  train_glob: "fineweb_train_*.bin"
+  val_file: fineweb_val_000000.bin
+  val_tokens: 10485760
+
+train:
+  micro_batch: 4             # 4 x 1024 = 4,096 tokens per fwd/bwd; 16 accumulation steps.
+                             # Measured 2026-09-13 by `r52.bench`: 6,519 tok/s at 4.66 GiB peak.
+                             # micro_batch 8 exceeds the 6 GiB limit (the bf16 logits tensor
+                             # alone is 8 x 1024 x 50304 x 2 B = 824 MB, doubled by its gradient).
+  tokens_per_step: 65536     # 2^16
+
+  muon_lr: 0.03536           # 0.05   * 0.7071
+  muon_momentum: 0.95
+  muon_weight_decay: 0.0
+  muon_nesterov: true
+  muon_ns_steps: 5
+
+  adam_lr_embed: 0.42426     # 0.6    * 0.7071
+  adam_lr_vembed: 0.42426
+  adam_lr_head: 0.005657     # 0.008  * 0.7071
+  adam_lr_scalar: 0.028284   # 0.04   * 0.7071
+  adam_betas_embed: [0.8, 0.95]
+  adam_betas_vembed: [0.75, 0.95]
+  adam_betas_head: [0.5, 0.95]
+  adam_betas_scalar: [0.9, 0.99]
+  adam_eps: 1.0e-10
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  adam_wd_scalar: 0.0
+
+  warmup_steps: 100
+  cooldown_frac: 0.4
+  final_lr_frac: 0.15
+  grad_clip: 0.0
+
+  max_tokens: 400000000      # 0.4B tokens -> 6104 optimizer steps
+  max_hours: 0.0
+  target_val_loss: 0.0
+
+  log_interval: 20
+  val_interval: 250
+  val_max_batches: 64        # 64 x 4 x 1024 = 262,144 tokens
+  val_micro_batch: 4
+  ckpt_interval: 250
+  keep_last: 2
+  out_dir: runs
+
+  memory_limit_gb: 6.0
+  cache_limit_gb: 1.0
+  seed: 1337
+  compile: true

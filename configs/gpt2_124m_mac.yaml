@@ -1,0 +1,129 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# Run B / Rung 0: a GPT-2-small-class model trained from scratch on a 16 GB Mac Mini M4.
+# Target: val loss <= 3.28 on the fixed FineWeb-10B validation split (modded-nanogpt's bar).
+#
+# ---------------------------------------------------------------------------------------
+# OPTIMIZER HYPER-PARAMETER PROVENANCE
+# ---------------------------------------------------------------------------------------
+# Fetched 2026-09-13 from KellerJordan/modded-nanogpt `train_gpt.py` (MIT), the current
+# record holder (1.23 min to 3.28 val loss on 8xH100), via
+#   gh api repos/KellerJordan/modded-nanogpt/contents/train_gpt.py
+# The record's `TrainingManager` declares:
+#     adam_defaults    = dict(lr=0.008, eps=1e-10, weight_decay=0.005)
+#     normuon_defaults = dict(lr=0.023, momentum=0.95, beta2=0.9, weight_decay=1.2)
+#     param_table = {
+#       "lm_head":      {"optim":"adam", "adam_betas":[0.5, 0.95],                "wd_mul":150.},
+#       "embed":        {"optim":"adam", "adam_betas":[0.5, 0.95],                "wd_mul":150.},
+#       "value_embeds": {"optim":"adam", "adam_betas":[0.75,0.95], "lr_mul":75.,  "wd_mul":5.0},
+#       "scalars":      {"optim":"adam", "adam_betas":[0.9, 0.99], "lr_mul":5.0,  "wd_mul":0.0},
+#       "qk_bank"/"vo_bank"/"mlp_bank": {"optim":"normuon"},
+#     }
+# so the record's effective values are
+#     lm_head : lr 0.008,  wd 0.750, betas (0.50, 0.95)
+#     embed   : lr 0.008,  wd 0.750, betas (0.50, 0.95)    <- tied to lm_head until 2/3 of the run
+#     v.embed : lr 0.600,  wd 0.025, betas (0.75, 0.95)    (= 0.008 * 75, 0.005 * 5)
+#     scalars : lr 0.040,  wd 0.000, betas (0.90, 0.99)    (= 0.008 * 5)
+#     hidden  : lr 0.023 NorMuon, momentum 0.95, wd 1.2
+#     eps 1e-10 everywhere; cooldown_frac 0.60, LR floor 0.15 x peak
+#     stage-1 batch = 8 * 2048 * 8 = 131,072 tokens  <- exactly our tokens_per_step
+#
+# WHAT WE COPY AND WHAT WE CHANGE (see docs/DEVIATIONS.md):
+#   * lm_head / value-embed / scalar LRs, weight decays, betas and eps: copied verbatim.
+#   * hidden matrices: mlx.optimizers ships plain **Muon**, not NorMuon (which adds an
+#     Adafactor-style variance estimator and is scaled differently), so we use the classic
+#     modded-nanogpt plain-Muon setting `lr=0.05, momentum=0.95, nesterov=True, ns_steps=5`
+#     that held the record through the 2024-11..2025 series, not the record's 0.023.
+#   * `embed` (wte): the record keeps wte *tied* to lm_head for the first 2/3 of training and
+#     therefore runs it at the lm_head LR.  Our embeddings are untied from step 0 (spec S3),
+#     which is the classic modded-nanogpt configuration -- and that used `embed lr 0.6`.
+#     We use 0.6 with no weight decay.
+#   * Batch size is identical (131,072 tokens), so NO batch-size LR rescaling is applied.
+name: gpt2_124m_mac
+
+model:
+  n_layer: 12
+  n_embd: 768
+  n_head: 6                  # head_dim = 768/6 = 128, as modded-nanogpt
+  n_kv_head: null            # MHA
+  vocab_size: 50304          # GPT-2's 50257 padded to a multiple of 128
+  block_size: 1024
+  rope_base: 10000.0
+  softcap: 15.0
+  qk_norm: true
+  use_value_embeds: true
+  n_value_embeds: 3          # value embeddings on layers 0,1,2 and 9,10,11
+  value_embed_share: true    # ONE shared table: 3 tables would add 1.4 GiB of fp32
+                             # params + AdamW state, which does not fit in 6 GiB.
+  use_unet_skips: true
+  mlp: relu2
+  mlp_ratio: 4.0
+  tie_embeddings: false
+  precision: mixed           # fp32 master params, bf16 matmuls
+  grad_checkpoint: false
+
+data:
+  source: fineweb
+  data_dir: data/fineweb10B-gpt2
+  train_glob: "fineweb_train_*.bin"
+  val_file: fineweb_val_000000.bin
+  val_tokens: 10485760       # modded-nanogpt's fixed validation split
+
+train:
+  micro_batch: 2             # 2 x 1024 = 2,048 tokens per fwd/bwd; 64 accumulation steps.
+                             # Measured 2026-09-13 on this M4 (2 optimizer steps each):
+                             #   mb 4            3,203 tok/s   6.63 GiB  <- BREACHES the 6 GiB rule
+                             #   mb 2            3,076 tok/s   5.11 GiB  <- chosen
+                             #   mb 2 + ckpt     2,644 tok/s   4.88 GiB  (14% slower for 0.23 GiB)
+                             # Peak here is dominated by *persistent* state -- fp32 params
+                             # 0.80 + fp32 grads 0.80 + AdamW moments 0.93 + Muon momentum
+                             # 0.34 = 2.7 GiB, plus the fresh parameter tree MLX's functional
+                             # optimizer allocates -- not by activations, which is why
+                             # gradient checkpointing barely helps.
+  tokens_per_step: 131072    # 2^17 == modded-nanogpt stage-1 batch
+
+  muon_lr: 0.05
+  muon_momentum: 0.95
+  muon_weight_decay: 0.0
+  muon_nesterov: true
+  muon_ns_steps: 5
+
+  adam_lr_embed: 0.6
+  adam_lr_vembed: 0.6
+  adam_lr_head: 0.008
+  adam_lr_scalar: 0.04
+  adam_betas_embed: [0.8, 0.95]
+  adam_betas_vembed: [0.75, 0.95]
+  adam_betas_head: [0.5, 0.95]
+  adam_betas_scalar: [0.9, 0.99]
+  adam_eps: 1.0e-10
+  adam_wd_embed: 0.0
+  adam_wd_vembed: 0.025
+  adam_wd_head: 0.75
+  adam_wd_scalar: 0.0
+
+  warmup_steps: 100          # the record uses 0; a short warmup is cheap insurance for a
+                             # multi-day single-GPU run we cannot babysit.
+  cooldown_frac: 0.4         # spec S4 (the record now uses 0.60)
+  final_lr_frac: 0.15        # the record cools down to 0.15 x peak, not to 0
+  grad_clip: 0.0             # off: Muon's Newton-Schulz already normalises hidden updates
+                             # and modded-nanogpt uses no clipping. A clip costs a full
+                             # extra copy of the gradient tree (~0.8 GiB here).
+
+  max_tokens: 750000000      # 0.75B tokens -> 5722 optimizer steps
+  max_hours: 0.0
+  target_val_loss: 3.28
+
+  log_interval: 10
+  val_interval: 250
+  val_max_batches: 128       # 128 x 2 x 1024 = 262,144 tokens (+-0.004 nats std. err.).
+                             # Set to 0 for the full 10,485,760-token split (~10 min).
+  val_micro_batch: 2
+  ckpt_interval: 250
+  keep_last: 2
+  out_dir: runs
+
+  memory_limit_gb: 6.0
+  cache_limit_gb: 1.0
+  seed: 1337
+  compile: true

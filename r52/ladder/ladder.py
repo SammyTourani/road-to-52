@@ -577,7 +577,7 @@ def fmt_usd(x: float | None) -> str:
 
 
 def fmt_range(lo: float | None, hi: float | None, formatter) -> str:
-    """Render ``lo`` alone, or ``lo–hi`` when the two differ (the frontier row)."""
+    """Render ``lo`` alone, or ``lo-hi`` when the two differ (the frontier row)."""
     if lo is None:
         return DASH
     if hi is None or math.isclose(lo, hi, rel_tol=1e-12):
@@ -702,7 +702,7 @@ def render_markdown(ladder: Ladder, *, generated: str | None = None) -> str:
         )
     parts.append(
         _table(
-            ["Run", "FLOPs (6ND)", "Disclosed GPU-hours", "Implied MFU (ours)", "Implied MFU (published)", "Source"],
+            ["Run", "FLOPs (6ND)", "Disclosed GPU-hours", "Implied MFU (ours)", "Implied MFU (published)", "Source"],  # noqa: E501
             calib_rows,
         )
     )
