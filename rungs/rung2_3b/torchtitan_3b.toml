@@ -1,0 +1,149 @@
+# =============================================================================================
+# road-to-52 -- Rung 2, 3B-class Llama-3-style dense model (torchtitan job spec)
+# =============================================================================================
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# READ THIS FIRST: torchtitan no longer takes a TOML file on its command line.
+#
+# The build brief for this package assumed the pre-2026-09 torchtitan layout: a shipped
+# `torchtitan/models/llama3/train_configs/llama3_8b.toml` selected with `--job.config_file`.
+# We listed that directory first, as instructed, before writing this file:
+#
+#   $ gh api repos/pytorch/torchtitan/contents/torchtitan/models/llama3
+#   README.md  __init__.py  config_registry.py  model.py  parallelize.py  sharding.py
+#   state_dict_adapter.py                                    <- no train_configs/, no *.toml
+#   $ gh api "search/code?q=repo:pytorch/torchtitan+extension:toml" --jq '.items[].path'
+#   pyproject.toml                                            <- only the packaging file, repo-wide
+#
+# At the pinned commit (150c4f73a035e8778f37d9f603a32534841f2a60, 2026-09-13, current `main` HEAD),
+# torchtitan configures a run as a Python function returning a `Trainer.Config` -- selected with
+# `--module`/`--config` (or the `MODULE=`/`CONFIG=` env vars `run_train.sh` reads), not a TOML
+# file. Quoting `torchtitan/config/README.md` at this commit: "A run is described by a **full
+# configuration**: a function that returns a complete `Trainer.Config`... Configurations are
+# written in Python." This is a real, recent architecture change (see the model-size baselines'
+# own module, `torchtitan/models/llama3/config_registry.py`, which defines `llama3_8b()` etc. as
+# plain Python, and the newer `torchtitan_recipes/` package the same README names as configuration's
+# actual future home).
+#
+# So this file is **not consumed by torchtitan's CLI**. It is the human-readable spec of every
+# field of the job we are pinning -- the single source of truth that `launch.sh` in this directory
+# turns into an actual `torchtitan_recipes/road_to_52.py` Python recipe (by heredoc, at launch
+# time, into the cloned torchtitan checkout -- see launch.sh STAGE 3). If you change a value here,
+# change it in launch.sh's heredoc too; they are not auto-synced (no TOML parser dependency is
+# assumed to exist on a bare rented GPU image).
+#
+# Every field below is cited to the exact torchtitan source it mirrors. Nothing here is invented
+# except where marked "our choice" / "UNVERIFIED" -- see rung2_3b/README.md "Why these dims" and
+# "What we could not verify" for the full explanation of each.
+# =============================================================================================
+
+[meta]
+ladder_row          = "Rung 2 -- 3B dense, Chinchilla-optimal (results/ladder.md)"
+torchtitan_repo     = "https://github.com/pytorch/torchtitan"
+torchtitan_commit   = "150c4f73a035e8778f37d9f603a32534841f2a60"   # verified 2026-09-13: gh api repos/pytorch/torchtitan/commits/main --jq .sha
+generated           = "2026-09-13"
+license             = "BSD-3 (torchtitan) / Apache-2.0 (this file)"
+
+# ---------------------------------------------------------------------------------------------
+# Model: NOT a hand-picked size. torchtitan already ships a "3B" Llama-3 flavor --
+# `torchtitan/models/llama3/__init__.py`, function `_3b()`, registered as
+# `llama3_configs["3B"] = (_3b, 131072)`. We use it verbatim rather than inventing our own dims.
+# Cross-checked field-for-field against Meta's own published Llama-3.2-3B `config.json`
+# (huggingface.co, unsloth/Llama-3.2-3B mirror, fetched 2026-09-13) -- every field below matches
+# exactly. torchtitan's "3B" is a faithful reproduction of the real Llama-3.2-3B architecture,
+# not an arbitrary interpolation between the 1B and 8B flavors.
+# ---------------------------------------------------------------------------------------------
+[model]
+family                = "llama3"
+flavor                = "3B"                  # model_registry("3B", seq_len=...) in config_registry.py
+dim                   = 3072                   # == Llama-3.2-3B hidden_size
+n_layers              = 28                     # == Llama-3.2-3B num_hidden_layers
+n_heads               = 24                     # == Llama-3.2-3B num_attention_heads
+n_kv_heads            = 8                      # == Llama-3.2-3B num_key_value_heads (GQA, 3:1 ratio)
+head_dim              = 128                    # dim / n_heads = 3072 / 24
+ffn_hidden_dim        = 8192                   # compute_ffn_hidden_dim(3072, multiple_of=1024, ffn_dim_multiplier=1.0)
+                                                #   = round_up(int(2*4*3072/3), 1024) = round_up(8192, 1024) = 8192
+                                                #   (verified against torchtitan/models/common/feed_forward.py source)
+vocab_size            = 128256                 # == Llama-3.2-3B vocab_size (Llama-3.1/3.2 tiktoken-style tokenizer)
+enable_weight_tying   = true                   # _3b() sets this True (unlike _8b/_70b/_405b) -- lm_head IS tok_embeddings
+rope_theta            = 500000.0
+rope_scaling          = "llama"
+fuse_qkv              = true
+attn_backend          = "flex"                 # model_registry(...)'s own default; no reason to override on H100
+native_max_context_length = 131072             # the flavor's registered ceiling; we use a much shorter seq_len below
+
+# our arithmetic (not an upstream-printed number) -- see README.md "Why these dims" for the
+# layer-by-layer derivation. Total == active: this is a dense model.
+approx_params_total  = 3_212_746_752           # ~3.21B
+approx_params_active = 3_212_746_752
+
+# ---------------------------------------------------------------------------------------------
+# Training. Token budget and hardware are the ladder's Rung 2 row; seq_len, precision, and
+# checkpoint cadence follow the pattern torchtitan's own shipped 8B/14B/30B-A3B configs use.
+# LR is OUR CHOICE, UNVERIFIED against a published recipe at this exact size -- see README.
+# ---------------------------------------------------------------------------------------------
+[training]
+seq_len                        = 4096          # overrides the flavor's native 131072; see README "Sequence length"
+tokens_target                   = 60_000_000_000  # 60B tokens -- results/ladder.md Rung 2 row
+precision                       = "bf16"
+float8                          = "optional"   # Float8LinearConverter on H100; off by default, see README "Precision"
+hf_assets_path                  = "./assets/hf/Llama-3.1-8B"  # reuse the Llama 3.1 tokenizer; vocab 128256 matches; GATED repo, see README
+optimizer                       = "adamw"
+lr                               = 4.0e-4       # OUR CHOICE / UNVERIFIED -- interpolated inside torchtitan's own shipped
+                                                 # LR range (405B: 8e-5, 70B: 1.5e-4, 8B: 3e-4; smaller model -> larger LR
+                                                 # is the standard pattern, but no torchtitan-shipped job exists at 3B to
+                                                 # copy verbatim). Sweep before trusting this for a real run.
+lr_scheduler                    = "warmup-stable-decay"
+warmup_steps                    = 600           # matches torchtitan's shipped 8B/14B/30B-A3B/32B jobs' warmup_steps
+microbatch_seq_multiplier        = 16           # num_tokens_per_microbatch_per_dp_rank = 16 * seq_len = 65,536 tok/rank
+                                                 # STARTING POINT ONLY -- an empirical memory-fit value the shipped
+                                                 # configs use at their *native* (131072) seq_len is 1-8x; ours is 32x
+                                                 # shorter so a much larger multiplier should fit, but this was not
+                                                 # tested on a real GPU (no training runs in this package). Tune by
+                                                 # doubling/halving to fit memory on the actual node before a real run.
+global_batch_tokens_at_8gpu      = 524_288      # microbatch_seq_multiplier * seq_len * n_gpus (grad_accum=1, no TP/PP/CP)
+approx_steps_for_60B_tokens      = 114_441      # tokens_target / global_batch_tokens_at_8gpu -- OUR arithmetic, recompute
+                                                 # if you change any of the three inputs above
+checkpoint_interval_steps        = 500          # matches torchtitan's shipped 8B/14B/30B-A3B/32B jobs' CheckpointManager interval
+activation_checkpoint            = "selective"  # SelectiveAC -- matches llama3_8b()'s choice (FullAC is the 70B/405B choice)
+
+# ---------------------------------------------------------------------------------------------
+# Parallelism: pure FSDP2 on one 8xH100 node. A 3.21B dense model's optimizer state (AdamW,
+# fp32 moments) is small enough that TP/PP/CP buy nothing here and only add complexity --
+# matches the pattern of torchtitan's own 8B/14B/30B-A3B jobs (also TP=PP=CP=1, FSDP-only) and
+# differs from 70B+ (which turn TP on). data_parallel_shard_degree=-1 is torchtitan's own
+# shorthand (seen in qwen3_14b/qwen3_30b_a3b/qwen3_32b) for "shard across the whole world size".
+# ---------------------------------------------------------------------------------------------
+[parallelism]
+strategy                   = "FSDP2"
+data_parallel_shard_degree = -1        # torchtitan shorthand: shard across world size (8)
+tensor_parallel_degree     = 1
+pipeline_parallel_degree   = 1
+context_parallel_degree    = 1
+world_size                 = 8
+hardware                   = "h100 x8"  # results/ladder.md Rung 2 row
+
+# ---------------------------------------------------------------------------------------------
+# Dataset hookup. torchtitan's dataloader is Grain-based (torchtitan/components/data/README.md),
+# not a fixed raw-token-bin format -- see data_plan.md for the full description of what a real
+# run consumes (the 100B pre-blended mix, pre-tokenized to a numpy memmap via the
+# PretokenizedMemmapSource pattern torchtitan's own docs demonstrate) and the decontamination step.
+# This spec, and launch.sh's generated recipe, reference the pre-registered `DATASETS["c4"]`
+# dataset (torchtitan.hf_datasets.text_datasets.DATASETS -- the same placeholder every shipped
+# config in config_registry.py uses) as a PLACEHOLDER ONLY, so the generated recipe is syntactically
+# complete and can be smoke-checked (e.g. via `COMM_MODE=fake_backend`, see torchtitan's run_train.sh)
+# without first preparing the real 100B mix. Swap this for the data_plan.md mix before a real run.
+# ---------------------------------------------------------------------------------------------
+[dataset]
+loader      = "GrainDataLoader"
+packing     = "ConcatThenSplitPackingConfig"
+placeholder = "DATASETS[\"c4\"]"   # see data_plan.md for the real 100B mix and the swap this needs
+
+# ---------------------------------------------------------------------------------------------
+# Launch mechanics -- see launch.sh for the actual commands.
+# ---------------------------------------------------------------------------------------------
+[launch]
+module  = "torchtitan_recipes.road_to_52"   # generated by launch.sh into the cloned checkout
+config  = "llama3_3b_road_to_52"
+ngpu    = 8
+command = "NGPU=8 MODULE=torchtitan_recipes.road_to_52 CONFIG=llama3_3b_road_to_52 ./run_train.sh"
