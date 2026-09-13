@@ -1,0 +1,47 @@
+{
+  "model": "gpt2-124m",
+  "benchmark": "hellaswag",
+  "value": 29.376618203545114,
+  "unit": "% acc_norm",
+  "conditions": {
+    "tokenizer": "gpt2 (tiktoken)",
+    "block_size": 1024,
+    "limit": null,
+    "n_examples": 10042,
+    "few_shot": 0,
+    "protocol": "llm.c dev/data/hellaswag.py completion style, token-length acc_norm",
+    "command": "python -m r52.eval.hellaswag --model models/gpt2-mlx"
+  },
+  "commit": "5c209e2+dirty",
+  "date": "2026-09-13",
+  "wall_clock_s": 684.618,
+  "machine": "Apple M4, 16 GiB, macOS 26.5.2, MLX 0.32.2",
+  "command": "python -m r52.eval.hellaswag --model models/gpt2-mlx",
+  "metrics": {
+    "acc": 0.2853017327225652,
+    "acc_norm": 0.29376618203545113,
+    "acc_norm_bytes": 0.29884485162318264,
+    "acc_ci95": [
+      0.27655329164775455,
+      0.2942143719993885
+    ],
+    "acc_norm_ci95": [
+      0.2849377233067788,
+      0.3027523654748693
+    ],
+    "n_correct": 2865,
+    "n_correct_norm": 2950,
+    "n_examples": 10042,
+    "n_truncated_rows": 0,
+    "peak_memory_gib": 1.7321406211704016,
+    "model": {
+      "name": "gpt2-mlx",
+      "kind": "mlx-lm",
+      "path": "models/gpt2-mlx",
+      "max_context": 1024,
+      "vocab_size": 50257,
+      "compute_dtype": "bfloat16",
+      "model_type": "gpt2"
+    }
+  }
+}

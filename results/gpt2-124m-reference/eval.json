@@ -1,0 +1,22 @@
+[
+  {
+    "model": "gpt2-124m",
+    "benchmark": "fineweb-val-loss",
+    "value": 3.4471360768191515,
+    "unit": "nats/token",
+    "conditions": "examples 10485760, tokenizer gpt2 (tiktoken), block_size 1024, split fineweb_val_000000.bin first 10,485,760 tokens, non-overlapping windows, precision bf16 compute, fp32 log-sum-exp",
+    "commit": "5c209e2+dirty",
+    "command": "python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2",
+    "date": "2026-09-13"
+  },
+  {
+    "model": "gpt2-124m",
+    "benchmark": "hellaswag",
+    "value": 29.376618203545114,
+    "unit": "% acc_norm",
+    "conditions": "examples 10042, few-shot 0, tokenizer gpt2 (tiktoken), block_size 1024, protocol llm.c dev/data/hellaswag.py completion style, token-length acc_norm",
+    "commit": "5c209e2+dirty",
+    "command": "python -m r52.eval.hellaswag --model models/gpt2-mlx",
+    "date": "2026-09-13"
+  }
+]

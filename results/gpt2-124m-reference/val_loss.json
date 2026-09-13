@@ -1,0 +1,38 @@
+{
+  "model": "gpt2-124m",
+  "benchmark": "fineweb-val-loss",
+  "value": 3.4471360768191515,
+  "unit": "nats/token",
+  "conditions": {
+    "tokenizer": "gpt2 (tiktoken)",
+    "block_size": 1024,
+    "limit": null,
+    "n_examples": 10485760,
+    "few_shot": null,
+    "split": "fineweb_val_000000.bin first 10,485,760 tokens, non-overlapping windows",
+    "precision": "bf16 compute, fp32 log-sum-exp",
+    "command": "python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2"
+  },
+  "commit": "5c209e2+dirty",
+  "date": "2026-09-13",
+  "wall_clock_s": 1729.726,
+  "machine": "Apple M4, 16 GiB, macOS 26.5.2, MLX 0.32.2",
+  "command": "python -m r52.eval.val_loss --model models/gpt2-mlx --block-size 1024 --max-tokens 10485760 --micro-batch 2",
+  "metrics": {
+    "val_loss": 3.4471360768191515,
+    "val_bpb": 1.1164074698521225,
+    "bytes_per_token": 4.454615592956543,
+    "n_tokens": 10485760,
+    "n_batches": 5120,
+    "peak_memory_gib": 1.2112856078892946,
+    "model": {
+      "name": "gpt2-mlx",
+      "kind": "mlx-lm",
+      "path": "models/gpt2-mlx",
+      "max_context": 1024,
+      "vocab_size": 50257,
+      "compute_dtype": "bfloat16",
+      "model_type": "gpt2"
+    }
+  }
+}
