@@ -159,9 +159,14 @@ def main(argv: list[str] | None = None) -> int:
 
     lm = LM.load(args.model, max_positions_per_forward=args.max_positions)
     if args.block_size > lm.max_context:
-        raise SystemExit(
-            f"--block-size {args.block_size} exceeds the model's context ({lm.max_context})"
+        # Clamp rather than abort: small models (e.g. tiny test configs) have short contexts.
+        # The recorded conditions carry the effective block size, so comparisons stay honest.
+        print(
+            f"--block-size {args.block_size} exceeds the model's context ({lm.max_context}); "
+            f"using {lm.max_context}",
+            flush=True,
         )
+        args.block_size = lm.max_context
     loader, array = make_loader(
         args.data_dir, args.val_file, args.block_size, args.micro_batch, args.max_tokens
     )
