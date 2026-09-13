@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test-apple-silicon:
+    # GitHub's macOS arm64 runners have Metal, so the MLX test suite runs for real.
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          uv venv --python 3.12 .venv
+          VIRTUAL_ENV=$PWD/.venv uv pip install -e ".[dev]"
+      - name: Lint
+        run: .venv/bin/ruff check r52 tests
+      - name: Test
+        run: .venv/bin/python -m pytest -q -x --timeout=600 -p no:cacheprovider
+        env:
+          HF_HUB_OFFLINE: "1"
