@@ -18,9 +18,10 @@ Owner: Sammy Tourani. Started 2026-09-13. Living document — every number links
   and nobody has published an MLX pretraining throughput benchmark. We build exactly that, and
   we climb a public **ladder** where every rung beats a *named* model at a *documented* cost,
   measured against Fable 5.1's published scores by a **gap tracker**.
-- **Rung 0 costs $0 and starts now:** a from-scratch 124M model trained on the Mac Mini M4 to
-  GPT-2-small quality (FineWeb val loss ≤ 3.28, the modded-nanogpt target), in an estimated 3–6
-  days of background compute.
+- **Rung 0 costs $0 and is running (since 2026-09-13):** a from-scratch 124M model trained on the
+  Mac Mini M4 in ~3 days of background compute, targeting OpenAI's released GPT-2 124M *as we
+  measured it with the same eval code* (FineWeb val loss 3.447, HellaSwag acc_norm 29.4%), with
+  the modded-nanogpt speedrun bar (val loss 3.28, a FineWeb-trained 124M) as the stretch.
 - **Hard rule:** no Claude outputs are ever used as training data (Anthropic's terms). Claude
   writes code and documents here; the model learns only from open data and open teachers.
 

@@ -15,8 +15,9 @@ is from Fable 5.1's published scores.
 
 > **Status (2026-09-13):** research complete; MLX core built and benchmarked (160 tests);
 > **Rung 0 is training right now** — a 124M-parameter model on 0.75B FineWeb tokens on a 16 GB
-> Mac Mini M4, 3,034 tokens/sec, 5.1 GiB, ETA ~2.8 days. Evaluation suite and post-training stack
-> in progress. See [`docs/PLAN.md`](docs/PLAN.md), [`docs/RESULTS.md`](docs/RESULTS.md), and the
+> Mac Mini M4, 3,034 tokens/sec, 5.1 GiB, ETA ~3 days. Evaluation suite (val loss, HellaSwag, DCLM
+> CORE) and post-training stack (midtrain, SFT, RLVR, chat) are built and tested; GPT-2 124M reference
+> measured. See [`docs/PLAN.md`](docs/PLAN.md), [`docs/RESULTS.md`](docs/RESULTS.md), and the
 > throughput table in [`results/mlx_pretrain_bench.md`](results/mlx_pretrain_bench.md).
 
 ## Measured: MLX pretraining throughput on a base M4 (first published numbers)
