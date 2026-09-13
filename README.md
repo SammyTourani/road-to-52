@@ -24,7 +24,8 @@ is from Fable 5.1's published scores.
 | **0** | Mac Mini M4, 16 GB | 124M, from scratch | ≤ 0.75B | **$0** (3–6 days) | GPT-2 small (2019): FineWeb val loss ≤ 3.28, HellaSwag ≥ 29.4% | building |
 | 1 | 8×H100, ~2 h | ~1B | ~20B | ~$50–100 | GPT-2 XL (1.6B) on DCLM CORE | planned |
 | 2 | 8×H100, ~5 days | 3B dense / 30B-A3B MoE | 60B | ~$815 | Llama-1 7B (2023) | planned |
-| 3 | 8×H100 | Rung 2 + SFT/RLVR/distillation from open teachers | — | $2k–5k | a 2024 frontier model on a non-saturated math/code eval | planned |
+| 3 | 64×H100, ~4 days | 8B dense | 160B | ~$5,800 | Llama 3.1 8B's size at 1/94th its tokens (size match, not a quality claim) | planned |
+| P | any rung + 8×H100 | post-training: midtrain → SFT → RLVR / distillation from open teachers | — | $2k–5k | a 2024 frontier model on a non-saturated math/code eval | planned |
 | — | undisclosed | Claude Fable 5.1 | — | 1e26–1e27 FLOPs | the bar | — |
 
 Costs come from a calibrated calculator (`python -m r52.ladder`) that reproduces DeepSeek-V3's

@@ -140,7 +140,8 @@ $2.43/h; formulas in `r52/ladder/ladder.py`). Local numbers use this machine's m
 | **1** | 8×H100, ~2 h | ~1B dense (nanochat d24–d26 class) | ~20B | ~$50–100 | hours | **GPT-2 XL** (1.6B): CORE ≥ 0.2565 | planned; needs budget |
 | **2** | 8×H100, ~5 days | 3B dense **or** 30B-A3B MoE, Chinchilla-optimal | 60B | ~$815 spot | days | **Llama-1 7B** (Meta 2023, MMLU 35): MMLU/HellaSwag/ARC/GSM8K | planned; needs budget |
 | 2b | 8×H100, ~11 days | same, overtrained | 150B | ~$2,000 spot | ~2 weeks | **Llama-2 7B** (2023, MMLU 45.3) — stretch | planned |
-| 3 | 8×H100 | post-train Rung 2 (SFT + RLVR/on-policy distillation from open teachers) | — | $2k–5k | days | a named 2024 frontier model on a *non-saturated* math/code eval (to be chosen from `results/GAP.md`) | planned |
+| 3 | 64×H100, ~4 days | 8B dense, Chinchilla-optimal | 160B | ~$5,800 spot | days | Llama 3.1 8B's *size* at 1/94th its tokens — a size match, not a quality claim | planned; needs budget |
+| P | any rung's base + 8×H100 | post-training track: midtrain → SFT → RLVR / on-policy distillation from open teachers | — | $2k–5k | days | a named 2024 frontier model on a *non-saturated* math/code eval (chosen from `results/GAP.md`) | planned |
 | ref | 384×H100, 24 d | SmolLM3 3B | 11T | ~$150k | — | (reference) | — |
 | ref | 2,048×H800, 2 mo | DeepSeek-V3 671B-A37B | 14.8T | ~$2.5M spot-equiv. | — | (reference) | — |
 | ref | undisclosed | Fable 5.1 class | — | 1e26–1e27 FLOPs | — | the bar | — |
