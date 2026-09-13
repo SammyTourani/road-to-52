@@ -13,9 +13,27 @@ for Apple Silicon, rigorously benchmarked, and used to climb a **ladder** where 
 *named* model at a *documented* cost — with a **gap tracker** that shows exactly how far each rung
 is from Fable 5.1's published scores.
 
-> **Status (2026-09-13):** research complete, core pipeline under construction, Rung 0 (a
-> from-scratch GPT-2-small-class model trained on a 16 GB Mac Mini M4 for $0) starting.
-> See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/RESULTS.md`](docs/RESULTS.md).
+> **Status (2026-09-13):** research complete; MLX core built and benchmarked (160 tests);
+> **Rung 0 is training right now** — a 124M-parameter model on 0.75B FineWeb tokens on a 16 GB
+> Mac Mini M4, 3,034 tokens/sec, 5.1 GiB, ETA ~2.8 days. Evaluation suite and post-training stack
+> in progress. See [`docs/PLAN.md`](docs/PLAN.md), [`docs/RESULTS.md`](docs/RESULTS.md), and the
+> throughput table in [`results/mlx_pretrain_bench.md`](results/mlx_pretrain_bench.md).
+
+## Measured: MLX pretraining throughput on a base M4 (first published numbers)
+
+Full training steps (Muon+AdamW, gradient accumulation, compiled), timed after warm-up:
+
+| model | seq | precision | tokens/s | TFLOPS | MFU (of 4.26 theoretical) | peak GiB |
+|---|---|---|---|---|---|---|
+| 30M | 1024 | mixed | 6,479 | 2.31 | 54% | 4.7 |
+| 60M | 1024 | mixed | 3,647 | 2.34 | 55% | 4.6 |
+| **124M** | **1024** | **mixed** | **3,034** | **2.59** | **61%** | **5.1** |
+| 124M | 512 | bf16 | 3,563 | 2.84 | 67% | 5.1 |
+| 350M | 1024 | bf16 | 1,168 | 2.83 | 66% | 5.0 |
+
+fp32 is ~30% slower than mixed precision; pure bf16 is ~8% faster than mixed but converges worse
+(see `research/05`). The full 24-row sweep with both MFU denominators is in
+[`results/mlx_pretrain_bench.md`](results/mlx_pretrain_bench.md).
 
 ## The ladder
 
