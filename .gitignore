@@ -1,0 +1,30 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+# data / models / runs (kept on /Volumes/SammyDisk, symlinked)
+/data
+/models
+/runs
+/checkpoints
+*.safetensors
+*.npz
+*.bin
+*.gguf
+*.parquet
+*.arrow
+# eval caches
+results/raw/
+.cache/
+# os / editors
+.DS_Store
+.idea/
+.vscode/
+# secrets
+.env
+*.key
