@@ -367,7 +367,7 @@ def test_unknown_axis_and_cell() -> None:
 
 
 def test_dry_run_reports_a_missing_corpus_instead_of_crashing(tmp_path: Path, capsys) -> None:
-    ax = matrix.axis("corpus")
+    ax = matrix.axis("corpus", root=str(tmp_path))  # an empty root: the corpus is guaranteed missing
     rec = abl_run.run_cell(ax, ax.cell("dclm"), dry_run=True, results_root=str(tmp_path))
     assert rec["dry_run"] is True
     assert "prepare_corpus.py" in rec["blocked"]

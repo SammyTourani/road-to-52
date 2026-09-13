@@ -7,7 +7,12 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 dependencies = [
   "mlx>=0.32",
-  "mlx-lm>=0.31.3",
+  # mlx-lm[evaluate]: the `evaluate` extra is the lm-eval bridge (r52/eval/lmeval.py), which
+  #   wraps `mlx_lm.evaluate`'s registered `mlxlm` LM class -- the install path
+  #   research/05-apple-silicon-training.md §7.1 documents. The extra itself only adds
+  #   `lm-eval` + `tqdm`, both already here; it is spelled out so the dependency of the
+  #   bridge on that module is explicit rather than accidental.
+  "mlx-lm[evaluate]>=0.31.3",
   "numpy>=2",
   "pyyaml>=6",
   "rich>=13",
@@ -15,7 +20,14 @@ dependencies = [
   "safetensors>=0.5",
   "huggingface_hub>=0.30",
   "datasets>=3",
-  "lm_eval>=0.4.13",
+  # lm_eval task extras the `standard` suite needs (r52/eval/lmeval.py):
+  #   ifeval -> langdetect, immutabledict, nltk  (IFEval's programmatic constraint checker)
+  #   math   -> math_verify, antlr4-python3-runtime==4.11, sympy  (MATH-500 / hendrycks_math
+  #             answer normalisation)
+  # Without them those two tasks raise ImportError at task-build time; the bridge turns that
+  # into a named skip rather than a crash, but the suite is then incomplete. Declared as
+  # extras, not as the leaf packages, so a future lm-eval can move them.
+  "lm_eval[ifeval,math]>=0.4.13",
   # -- data-ablation lab (r52/ablate, r52/tokenizer_train.py) -------------------------
   # tokenizers: trains our own byte-level BPE and writes the `tokenizer.json` mlx-lm
   #   loads (Apache-2.0; docs/PLAN.md §5's tokenizer choice). Already a transitive

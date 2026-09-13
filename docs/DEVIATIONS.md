@@ -815,3 +815,326 @@ BPE was fitted on in the first place. The real lever at these widths is the head
 a 32,768-row `lm_head` is 12.6M parameters against 19.3M, and the same saving repeats on
 `wte` and the value-embedding table. The axis should be read as "is a 35% cheaper vocabulary
 free?", not as "is it better compression?".
+
+---
+
+# Deviations — lm-eval bridge
+
+Builder: the lm-evaluation-harness bridge (`docs/ARCHITECTURE.md` §6, last paragraph:
+"Later phases add `mlx_lm.evaluate` (lm-eval bridge) for MMLU-Pro/GPQA/GSM8K/IFEval on
+exported and post-trained models"). Files: `r52/eval/lmeval.py`, `scripts/eval_lmeval.sh`,
+`tests/test_eval_lmeval.py`, dependency lines in `pyproject.toml`. Date: 2026-09-13. Machine:
+Mac Mini M4, 16 GB, macOS 26.5.2, MLX 0.32.2, mlx-lm 0.31.3, lm-eval 0.4.13 — **with the
+Rung-0 124M pretraining run and a full CORE eval both holding the GPU**, so every wall-clock
+below is a three-way-shared-GPU wall-clock.
+
+## L0. `mlx_lm.evaluate` works on our `model_type: r52gpt` plugin exports — so it is wrapped, not replaced
+
+The build brief said: check whether `mlx_lm.evaluate` loads our plugin exports, wrap it if so,
+and otherwise register our own `lm_eval.api.model.LM` subclass on top of `r52.eval.lm.LM`.
+
+It works. `mlx_lm.evaluate.MLXLM.__init__` calls `mlx_lm.utils.load`, which calls
+`load_model`, which honours `model_file: "r52gpt.py"` — the same hook `r52.export` already
+relies on for `mlx_lm.generate` / `server` / `lora`. Verified before writing a line of the
+bridge:
+
+```
+$ .venv/bin/mlx_lm.evaluate --model models/tiny200-mlx --tasks arc_easy --limit 5 \
+    --batch-size 4 --no-apply-chat-template --output-dir <tmp>
+{"name": "arc_easy", "sample_len": 5, "acc,none": 0.0, "acc_norm,none": 0.0, ...}
+```
+
+(`transformers` prints `You are using a model of type r52gpt to instantiate a model of type ''`
+— that is its *config* loader, not mlx-lm's; the weights load through the plugin regardless.)
+
+So `r52/eval/lmeval.py` imports `mlx_lm.evaluate.MLXLM` directly rather than shelling out to
+the CLI or reimplementing `loglikelihood` / `loglikelihood_rolling` / `generate_until`. Direct
+import buys three things a subprocess would not: `r52.eval.lm.configure_runtime()` runs
+*before* the weights load (so the 3 GiB guideline actually applies), the full
+`simple_evaluate` return dict is available (`n-samples`, `versions`, `configs`,
+`higher_is_better` all land in the results JSON), and the model is loaded once for a whole
+suite instead of once per task.
+
+**The custom-LM fallback was therefore not built**, and neither was the "KV-cache-free but
+batched loglikelihood path" the brief specified for it. Upstream's `loglikelihood` is better
+than that design anyway: it groups requests by context and reuses one prompt cache across a
+question's continuations, which is the shared-prefix optimisation `docs/DEVIATIONS.md` §E9
+says our own multiple-choice evals leave on the table.
+
+**Measured equivalence.** The bridge and `r52.eval.hellaswag` score the same continuations
+through completely different code (masked per-token NLL with no cache, vs fp32
+log-probabilities with a cached prefix). On three HellaSwag items × four endings on
+`models/tiny200-mlx`, the largest disagreement is **1.5e-5 nats on totals of 45–147 nats** —
+fp32 rounding. `tests/test_eval_lmeval.py::test_loglikelihood_matches_hellaswag_scoring`
+pins it at 1e-3.
+
+## L1. Upstream bug: IFEval crashes in mlx-lm 0.31.3, and the bridge patches it
+
+`mlx_lm/evaluate.py`:
+
+```python
+def _rstrip_until(s, untils):
+    l = len(s)
+    f = [s.find(u) for u in untils]
+    f = [l if x < 0 else x for x in f]
+    return s[: min(f)]          # ValueError: min() iterable argument is empty
+```
+
+lm-eval's `ifeval` sets `generation_kwargs: {until: []}` — "generate to EOS or the token cap,
+do not truncate". With an empty `untils`, `min(f)` raises, so **every IFEval run dies after
+paying for the generation**, in post-processing:
+
+```
+File ".../mlx_lm/evaluate.py", line 358, in generate_until
+    completions[e] = _rstrip_until(text, opt["until"])
+ValueError: min() iterable argument is empty
+```
+
+`r52.eval.lmeval.patch_upstream()` (called from `build_lm`, idempotent) replaces the module
+function with one that returns `s` unchanged for an empty stop list and defers to upstream
+otherwise. That is the intended semantics, it is three lines, and it is the only upstream
+behaviour this bridge changes. *Worth reporting to ml-explore/mlx-lm.* After the patch,
+IFEval runs: `ifeval --limit 5` on `models/gpt2-mlx` → `prompt_level_strict_acc 0.00`,
+`inst_level_strict_acc 0.25`, 10.7 s.
+
+## L2. `max_gen_tokens` vs `max_gen_toks`: uncapped generation is 8,192 tokens per prompt
+
+Also in `generate_until`:
+
+```python
+max_tokens = [self._max_tokens or opt.get("max_gen_tokens", DEFAULT_MAX_TOKENS) for opt in options]
+```
+
+lm-eval's generation kwarg is spelled **`max_gen_toks`**, not `max_gen_tokens`, so the `.get`
+never hits and every task falls back to `DEFAULT_MAX_TOKENS = 8192` unless the caller sets
+`_max_tokens`. A 5-item GSM8K smoke would generate 40,960 tokens instead of ~1,280.
+
+Rather than patch this one (the fix is upstream's to make; the key name is a judgement call
+about which spelling is canonical), every generative `TaskSpec` carries its own
+`max_gen_tokens` and `run_task` sets `lm._max_tokens` per task: `gsm8k` 256, `humaneval` 1024,
+`hendrycks_math500` 1024, `ifeval` 1280 (the task's own `max_gen_toks`), `mmlu_pro` 2048.
+`--max-gen-tokens N` overrides all of them, and — because a truncated generation can lose the
+answer and therefore change the score — the value is recorded in the command string in
+`docs/RESULTS.md`.
+
+`_max_tokens` is doubly loaded upstream: in `loglikelihood` the *same* attribute is the prompt
+**truncation** length. So `run_task` sets it to `context - 1` for loglikelihood tasks, which
+is what keeps a 5-shot MMLU prompt from running past `models/gpt2-mlx`'s 1,024 learned
+position embeddings. Leaving it at `None` (→ 8,192) would crash GPT-2 on any long few-shot
+prompt; setting it to a generation cap like 256 would silently truncate every context.
+
+## L3. Upstream bug not patched: `NameError` on a continuation longer than the context
+
+`mlx_lm/evaluate.py:209` (the `prefix_l == 0` branch of `loglikelihood`) appends to
+`all_scores` / `all_is_greedy`, which do not exist in that function — the locals are called
+`scores` and `is_greedy`. It fires only when truncation eats the entire prompt, i.e. when one
+continuation is longer than the model's context. Fixing it properly means copying ~80 lines of
+upstream `loglikelihood` into this repo to change two names, which is exactly the fork the
+"wrap, don't reimplement" decision avoids. Instead `_skip_reason` classifies a `NameError` out
+of `simple_evaluate` and reports it as *"a continuation is longer than the model's context;
+raise `--block-size` or drop the task"*, which is the actionable version of the crash.
+
+## L4. `hellaswag` would have overwritten the llm.c number, so the lm-eval one carries a different unit
+
+`r52/bar/gap.py` keys a results cell on `(model, benchmark, unit)`, and
+`r52.eval.report._merge_gap_json` replaces any entry matching that triple. `r52.eval.hellaswag`
+already owns `("gpt2-124m", "hellaswag", "% acc_norm")` with **llm.c's** protocol, which §E2
+of this file documents as *not the same eval* as lm-eval's `hellaswag` (lm-eval prefixes the
+activity label, strips brackets, collapses whitespace, and normalises `acc_norm` by
+**characters** rather than tokens). Writing the lm-eval number under the same unit would have
+silently destroyed the validated llm.c row.
+
+The bridge therefore reports lm-eval's HellaSwag as `"% acc_norm (lm-eval)"`. Both local
+numbers survive in `results/<run>/eval.json`; `gap.py` sorts by `(benchmark, unit)` and shows
+the first local entry, so `"% acc_norm"` (llm.c) still wins the displayed cell and the lm-eval
+figure sits beside it in `GAP.json`. Every other benchmark id uses `bar.yaml`'s own unit
+string verbatim, which `tests/test_eval_lmeval.py::test_bar_benchmark_ids_resolve` asserts.
+
+**Measured, and this is why the distinction matters.** On `models/gpt2-mlx`, first 100
+validation items, same slice, three protocols:
+
+| protocol | acc | acc_norm |
+|---|---|---|
+| llm.c (`r52.eval.hellaswag --limit 100`) | 0.3800 | 0.3300 (bytes: 0.3900) |
+| lm-eval (`r52.eval.lmeval --tasks hellaswag --limit 100`) | — | **0.4400** |
+| llm.c, **full 10,042** (§E7) | 0.2853 | 0.2938 |
+
+Two separate effects, both worth stating plainly: lm-eval's text rewriting is worth ~5 points
+over llm.c's on the same items, and **the first 100 items are ~4–9 points easier than the full
+set** — `--limit` in lm-eval takes a prefix, not a random sample. Which is exactly why
+research/05 §7.2 says never to compare a `--limit`-ed score to a published full-set number,
+and why `conditions["limit"]` in this bridge is never absent: it is the integer, or the string
+`"none (full set)"`.
+
+## L5. Two task names in the brief do not exist in lm-eval 0.4.13
+
+`TaskManager().all_tasks` (14,683 entries) has **no `gpqa_diamond`** and **no `math_500`**.
+What exists:
+
+| brief | shipped | why |
+|---|---|---|
+| `gpqa_diamond` | **`gpqa_diamond_zeroshot`** | `gpqa/zeroshot/_gpqa_zeroshot_yaml`, `output_type: multiple_choice`, 0-shot, acc + acc_norm over `(A)`–`(D)`. The alternatives are `gpqa_diamond_n_shot`, `gpqa_diamond_cot_zeroshot`, `gpqa_diamond_cot_n_shot`, `gpqa_diamond_generative_n_shot` and `leaderboard_gpqa_diamond`. Loglikelihood is the cheap one and the only one meaningful for a base model with no chain of thought. |
+| `math_500` | **`hendrycks_math500`** | `dataset_path: HuggingFaceH4/MATH-500` — literally the MATH-500 dataset, inheriting `hendrycks_math_algebra`'s generate_until + `exact_match`. `minerva_math500` is the same 500 items with Minerva's prompt and normaliser. The per-subject `hendrycks_math_*` subsets are the full 5,000-item MATH; `leaderboard_math_*_hard` is the Open-LLM-Leaderboard-v2 level-5 subset. |
+
+`tests/test_eval_lmeval.py::test_names_the_brief_asks_for_do_not_exist_under_those_spellings`
+asserts *both* directions, so a future lm-eval that adds `gpqa_diamond` or `math_500` fails
+loudly instead of leaving the suite quietly pointing at the substitute.
+
+`gpqa_diamond_zeroshot` is also the one **gated** task. Unauthenticated it raises
+`DatasetNotFoundError: Dataset 'Idavidrein/gpqa' is a gated dataset on the Hub. You must be
+authenticated to access it.` — classified by `_skip_reason` into *"open
+https://huggingface.co/datasets/Idavidrein/gpqa, accept the terms, then `huggingface-cli
+login` (or set HF_TOKEN)"*. A skip writes **no** results row; a gated benchmark must not
+appear in the gap table as a zero.
+
+## L6. `gsm8k` at 8 shots, not `gsm8k_cot`
+
+The brief says "`gsm8k` (8-shot CoT, generative)". lm-eval has both, and they are different
+evals: `gsm8k` defaults to **5** shots drawn from the train split, whose targets are the
+dataset's own worked solutions ending in `#### N` (so it *is* chain-of-thought, just with
+sampled exemplars); `gsm8k_cot` pins the 8 hand-written PaLM exemplars in a `Q:/A:` format and
+scores `The answer is N`. The suite ships the task the brief names, `gsm8k`, at
+`num_fewshot=8`, and `gsm8k_cot` remains one `--tasks gsm8k_cot` away. The headline metric is
+`exact_match,strict-match` (the `#### N` regex), with `flexible-extract` recorded alongside in
+`metrics` — a base model that writes the right number in prose scores 0 strict and >0 flexible,
+and conflating the two is the most common way GSM8K numbers get inflated.
+
+## L7. `python -m mlx_lm.evaluate` silently does nothing
+
+`mlx_lm/evaluate.py` defines `main()` but has no `if __name__ == "__main__"` guard, so
+`python -m mlx_lm.evaluate --model ... --tasks ...` exits 0 in 1.5 s having run nothing. The
+working invocations are the console script `.venv/bin/mlx_lm.evaluate` (the
+`mlx_lm.evaluate:main` entry point) or `python -c "from mlx_lm.evaluate import main; main()"`.
+Recorded because a silent no-op is the worst possible failure mode for an eval harness, and
+because `metrics.mlx_lm_equivalent_command` in every results file quotes the console-script
+form for exactly this reason.
+
+## L8. Two dependency extras, or two of the seven `standard` tasks cannot run
+
+`lm_eval` declares `evaluate` as a core dependency (HumanEval's `code_eval`) but puts the rest
+behind extras, and the ones the `standard` suite needs were not installed:
+
+* `lm_eval[ifeval]` → `langdetect`, `immutabledict`, `nltk` — IFEval's programmatic constraint
+  checker. `langdetect` and `immutabledict` were **missing**.
+* `lm_eval[math]` → `math_verify`, `antlr4-python3-runtime==4.11`, `sympy` — MATH-500 answer
+  normalisation. `math_verify` and `antlr4` were **missing**.
+
+`pyproject.toml` now asks for `lm_eval[ifeval,math]>=0.4.13` (extras, not leaf packages, so a
+future lm-eval can move them) and `mlx-lm[evaluate]>=0.31.3` (research/05 §7.1's documented
+install path; the extra itself only adds `lm-eval` + `tqdm`). Installing added five packages
+and downgraded nothing: `antlr4-python3-runtime 4.11.0`, `immutabledict 4.3.1`,
+`langdetect 1.0.9`, `latex2sympy2-extended 1.11.0`, `math-verify 0.9.0`. Without them the
+bridge turns the resulting `ImportError` into a named skip rather than a crash, but the suite
+is then incomplete — which is worse, because a missing row looks like a choice.
+
+## L9. The commit is read out of `.git` when `git` cannot run — but the CLI is still preferred
+
+The build brief said `git` was broken on this machine and to read `.git/HEAD` manually. It is
+**intermittently** broken, not permanently: some invocations return
+*"You have not agreed to the Xcode license agreements"* (one fired inside lm-eval's own
+`get_git_commit_hash()` during the first `mlx_lm.evaluate` run), while a plain
+`git rev-parse --short HEAD` in the same shell later succeeded.
+
+Shipping only the manual reader would have thrown away information, because
+`r52.eval.report.git_commit()` runs `git status` as well and therefore knows whether the tree
+is **dirty** — the `+dirty` suffix every existing row in `docs/RESULTS.md` carries. So
+`r52.eval.lmeval.git_commit()` tries `report.git_commit()` first and falls back to
+`git_commit_from_files()`, which reads `.git/HEAD`, follows the ref into `.git/refs/…` or
+`.git/packed-refs`, handles a detached HEAD and a worktree `gitdir:` file, and returns the
+7-character hash with no subprocess. Measured on this tree: CLI → `7821421+dirty`,
+files → `7821421`.
+
+The fallback **cannot** know whether the tree is dirty, so it never appends `+dirty`. Rather
+than guess, a results file whose commit came from the fallback carries
+`metrics.git_dirty = "unknown (git CLI unavailable; commit read from .git/HEAD)"`. **A bare
+hash from this bridge means "dirtiness unknown", not "clean"** — the one place where a row
+here is less precisely anchored than the `5c209e2+dirty` rows the eval builder left.
+`git_commit_from_files` is unit-tested against a synthetic `.git` (loose ref, packed-refs,
+detached HEAD, worktree file, and an unresolvable ref) so the fallback is not first exercised
+the day `git` breaks again.
+
+## L10. The bridge evaluates exported directories only, and says so instead of guessing
+
+Every other eval in `r52/eval/` goes through `r52.eval.lm.LM`, which loads an r52 checkpoint
+*or* an mlx-lm directory and pins the tokenizer to GPT-2 tiktoken for both (§E8). This one
+cannot: lm-eval renders prompts as **text**, so it needs the model's own tokenizer files, and
+`mlx_lm.utils.load` needs `config.json`. Pointed at `runs/<run>/ckpt/best`, `_check_model_spec`
+raises with the fix rather than a stack trace:
+
+```
+runs/tiny200/ckpt/best is an r52 checkpoint, not an mlx-lm model directory. ...
+    python -m r52.export runs/tiny200/ckpt/best models/<name>-mlx
+    python -m r52.eval.lmeval --model models/<name>-mlx --suite quick
+```
+
+Same for an export made with `--no-tokenizer`. A path that does not exist is assumed to be an
+HF / mlx-community repo id and passed through untouched.
+
+Related: `use_chat_template` defaults to **False** here, where upstream defaults it to "True
+whenever the tokenizer has a chat template". Every r52 export ships one (`r52.chat_template`,
+so `mlx_lm.chat` works on base models too), so upstream's default would silently flip every
+base-model loglikelihood eval into chat mode and change every score. `--apply-chat-template`
+turns it on for post-trained models, and the flag is recorded in `conditions`.
+
+## L11. Quantization is recorded on every row, because research/05 §7.1 measured what it costs
+
+All of our exports are bf16, so every row here says `quantization: none (bfloat16)`. The field
+exists anyway because the moment the bridge is pointed at an `mlx-community/*-4bit` repo the
+number moves: Apple's own `mlx_lm/BENCHMARKS.md`, quoted in research/05 §7.1, measures
+bf16 → q4 costing **3.3 MMLU-Pro points**, q4 g32 2.6, and q6 only 0.5. "Evaluate at q6 or q8,
+never q4" is only checkable if the score carries the quantization, so `quantization_string()`
+renders `q6 g64` / `q4` / `none (bfloat16)` into `conditions` on every run.
+
+## L12. Measured: GPT-2 124M, `quick` suite, `--limit 100`
+
+`scripts/eval_lmeval.sh models/gpt2-mlx quick --limit 100` (124 s wall-clock on a GPU already
+holding a pretraining run and a CORE eval; peak 0.35 GiB against the 3 GiB guideline):
+
+| task | metric | measured (limit 100) | ± stderr | literature, full set |
+|---|---|---|---|---|
+| `arc_challenge` | acc_norm | **24.00 %** | 4.29 | ~19–23 % |
+| `piqa` | acc_norm | **62.00 %** | 4.88 | ~62–63 % |
+| `winogrande` | acc | **50.00 %** | 5.03 | ~51.6 % |
+| `lambada_openai` | acc | **34.00 %** | 4.76 | ~32–35 % |
+| `hellaswag` | acc_norm (lm-eval) | **44.00 %** | 4.99 | 31.14 % |
+
+Four of five land inside a standard error of the published range. **HellaSwag does not**, and
+§L4 above measures why: it is the `--limit` prefix, not the harness — llm.c's protocol on the
+*same* 100 items scores 0.3300 acc_norm against 0.2938 on the full 10,042. None of these five
+numbers may be quoted as GPT-2's score; they are GPT-2's score on the first 100 items, which
+is what the `limit 100` in every `conditions` string says.
+
+`models/tiny200-mlx` (a 200-step, 128-context `r52gpt` plugin export) at `--limit 20`, 57 s:
+`arc_challenge` 15.00, `piqa` 50.00, `winogrande` 50.00, `lambada_openai` 0.00, `hellaswag`
+20.00 — i.e. chance or below on everything, which is the correct answer for a model trained
+for 200 steps, and the point of running it is that the plugin path produces numbers at all.
+
+Generative smoke, `--tasks gsm8k ifeval --limit 5 --max-gen-tokens 128` on `models/gpt2-mlx`
+(24 s): `gsm8k` `exact_match,strict-match` **0.00 %** (8-shot, flexible-extract also 0.00),
+`ifeval` `prompt_level_strict_acc` **0.00 %** (`inst_level_strict_acc` 0.25). Zero is the
+expected answer — a 124M base model neither does arithmetic nor follows instructions — and the
+point of the smoke is that the generative path produces a number instead of crashing (§L1) or
+generating 8,192 tokens per prompt (§L2).
+
+**The full `standard` suite was never run**, per the brief and per research/05 §7.3's estimate
+of 2–4 days for unlimited MMLU-Pro alone on this machine.
+
+## L13. These validation runs deliberately did not touch `results/` or `docs/RESULTS.md`
+
+Every run above used `R52_RESULTS_DIR=<scratch>`, which also redirects the markdown row to
+`<scratch>/RESULTS.md`. Two reasons: this builder owns neither file, and a CORE eval was
+running concurrently with `--report --run gpt2-124m-reference`, so two processes appending to
+`docs/RESULTS.md` would have raced on a read-modify-write. To land the numbers for real, drop
+the variable:
+
+```bash
+R52_MODEL_ID=gpt2-124m R52_RUN=gpt2-124m-reference \
+  scripts/eval_lmeval.sh models/gpt2-mlx quick --limit 100
+```
+
+which writes `results/gpt2-124m-reference/lmeval_{arc_challenge,piqa,winogrande,
+lambada_openai,hellaswag}.json`, merges five entries into that run's `eval.json` in `gap.py`'s
+flat schema, and appends five rows to `docs/RESULTS.md`. `piqa`, `winogrande`,
+`lambada_openai` and `mmlu` have no `bar.yaml` benchmark id and are dropped from the gap table
+by `gap.merge_local`, exactly as `gap.py` documents for any unknown id; their JSON files are
+written regardless.
