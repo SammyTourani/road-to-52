@@ -140,10 +140,25 @@ From `research/02-open-training-stack.md` (recommended-stack table) and `researc
 | Data processing | datatrove | datatrove; NeMo Curator with idle GPUs |
 | Dead/avoid | torchtune, torchforge, NeMo monolith, unlicensed repos (autoresearch, evalchemy) | — |
 
-Data mix: `research/03-open-data.md` (pending at time of writing) — Rung 0 uses the
-`kjj0/fineweb10B-gpt2` shards for exact comparability with the speedrun target; later rungs use a
-FineWeb-Edu / DCLM / ClimbMix-style mix with code and math, decontaminated against every eval we
-report, and with all Claude-distilled sets excluded.
+**Data** (`research/03-open-data.md`, 393 sources):
+
+| Use | Choice | Notes |
+|---|---|---|
+| Rung 0 pretraining | `kjj0/fineweb10B-gpt2` shards (FineWeb 10B sample, GPT-2 tokens) | exact comparability with the modded-nanogpt / llm.c target (val loss 3.28) |
+| Local mix with own tokenizer (≤10B tokens, ~70 GB) | 70% `allenai/dolma3_mix-150B-1025` slice · 15% `HuggingFaceTB/stack-edu` · 8% `HuggingFaceTB/finemath` (4plus) · 7% Cosmopedia v2 | all commercially clean; ClimbMix avoided (NC license) |
+| Mid (100B tokens, ~270–450 GB) | `HuggingFaceFW/finepdfs_edu_50BT-dclm_30BT-fineweb_edu_20BT` (pre-blended) or the built mix in research/03 §10.2 | evidence: DCLM > FineWeb-Edu by +7 CORE at equal tokens; Nemotron-CC > DCLM; FinePDFs is the freshest signal |
+| SFT | `HuggingFaceTB/smol-smoltalk` (local) · `allenai/Dolci-Think-SFT-*`, `open-thoughts/OpenThoughts3-1.2M`, `nvidia/Nemotron-SFT-*` (mid) | open teachers only (DeepSeek/Qwen/GLM/gpt-oss) |
+| Preference | `nvidia/HelpSteer3` · `allenai/Dolci-Think-DPO-*` | **not** the Tulu 3 preference mixture (Claude in the pool) |
+| RLVR | `reasoning-gym` (procedural, free) · `BytedTsinghua-SIA/DAPO-Math-17k` · `SynthLabsAI/Big-Math-RL-Verified` · `microsoft/rStar-Coder` · `allenai/RLVR-IFeval` | verifiable rewards; no sandbox needed for reasoning-gym |
+| Decontamination | `allenai/decon` against every eval we report | research/03 §8 |
+
+**Excluded (Claude-derived, verified):** `SWE-bench/SWE-smith-trajectories` (97.85% Claude by its own
+`model` column), `SWE-Gym/OpenHands-*-Trajectories`, `R2E-Gym/R2EGym-SFT-Trajectories`,
+`allenai/llama-3.1-tulu-3-8b-preference-mixture` (and SmolTalk2's Preference split that inherits
+it), `Anthropic/hh-rlhf`, every `*claude-code-traces*` corpus, `QuixiAI/dolphin-distill`
+(transitive), plus surgery on `tulu-3-sft-mixture` (drop the Claude-written Python subset) and
+`SWE-smith` tasks (drop `lm_rewrite`). GPT/Gemini-distilled sets are avoided by default for the same
+reason (OpenAI/Google terms).
 
 ## 6. Phases
 
