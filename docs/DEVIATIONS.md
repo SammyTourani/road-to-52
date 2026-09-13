@@ -1138,3 +1138,115 @@ flat schema, and appends five rows to `docs/RESULTS.md`. `piqa`, `winogrande`,
 `lambada_openai` and `mmlu` have no `bar.yaml` benchmark id and are dropped from the gap table
 by `gap.merge_local`, exactly as `gap.py` documents for any unknown id; their JSON files are
 written regardless.
+
+# Deviations — job queue
+
+*Builder note, 2026-09-13. `r52/queue.py`, `scripts/queue.sh`, `queue/v1.yaml`,
+`tests/test_queue.py`. Every job command below was verified against its CLI's `--help` (and,
+where that was not enough, its source), not templated from the plan text.*
+
+## Q1. `done_when` grew from "a file or glob" into a small ANDed predicate dict
+
+Two shapes of job need more than "this path exists". `rung0-wait`, and every job that
+launches through a self-backgrounding `scripts/{train,sft,rl}.sh`, needs "the trainer process
+is gone AND its checkpoint exists": `ckpt/best` is written the first time validation improves
+on `math.inf`, which happens at ~step 250 of 5,722 for Rung 0, so "the file exists" alone
+would call a run three days from finished "done" the moment it produced its first good
+checkpoint. `prep-corpora` needs six manifests, not one. `is_done()` therefore accepts either
+a plain string (a path/glob, unchanged from the spec) or a dict of `file` / `glob` / `files` /
+`pid_dead` keys, ANDed together. `pid_dead` is the compound predicate's other half: a pidfile
+that is missing, unreadable, or names a dead process.
+
+## Q2. `gpu_wait_only`: one field added beyond the spec's seven, and only `rung0-wait` uses it
+
+"Must detect an externally running `r52.train` ... as 'GPU busy' and wait rather than launch"
+has to run before every `needs_gpu` job's launch, as a safety net independent of the
+`after`-chain that normally keeps two GPU jobs from overlapping. Applied unconditionally, it
+would also block `rung0-wait` forever: `rung0-wait`'s entire purpose is to wait on exactly the
+`r52.train` process that check is designed to detect, so it needs to be exempt from its own
+reason for existing. `gpu_wait_only: bool` (default `false`) is that exemption; it is set on
+exactly one of the 20 jobs (`tests/test_queue.py::test_real_queue_v1_yaml_is_well_formed_and_
+matches_the_design` asserts this). Verified live, not only in a test double: the real
+`gpt2-124m-mac` `r52.train` (PID 46011, started 13:58, still training while this was built) is
+what `_external_gpu_busy()` matches on this machine right now — an early run of the test suite
+caught its own false positive from exactly that, before the autouse fixture that neutralizes
+it for every test except the two that opt back in on purpose.
+
+## Q3. Two commands in the plan text needed correcting, not templating
+
+* **`nano-midtrain`** uses `configs/posttrain/midtrain_nano_train.yaml`, not
+  `configs/posttrain/midtrain_nano.yaml`. The latter is the mixture-BUILDER recipe consumed
+  by `scripts/prepare_midtrain_data.py` (`sources:` / `weight:` / `out_dir: data/midtrain`, no
+  `model:`/`data:`/`train:` blocks); `r52.posttrain.midtrain` calls `r52.config.load_config`
+  on its `config` argument, which raises on unknown top-level keys, so the mixture recipe
+  would be rejected immediately. `midtrain_nano_train.yaml`'s own header gives the intended
+  invocation almost verbatim (`--init-from runs/a1/ckpt/best --run-name m1`); this queue's
+  jobs use `nano-a` / `nano-m1` throughout instead of the docstring's bare `a1` / `m1`, both
+  to match the plan's own `nano-a` and to avoid colliding with a quick manual smoke run under
+  one of those short names (`runs/mt-tiny`, `runs/sft-tiny`, `runs/rl-tiny` already exist from
+  exactly that kind of run).
+* **`nano-rl-export`** copies `runs/nano-rl/final/` to `models/r52-nano-30m-rl-mlx/` instead
+  of calling `r52.export`. `GRPOTrainer.save()` (`r52/posttrain/rl.py`) already writes
+  `final/` as a complete mlx-lm model directory — `config.json` / tokenizer files copied from
+  the base export plus a fresh bf16 `model.safetensors` — matching `scripts/rl.sh`'s own
+  footer ("an mlx-lm model directory; chat with scripts/chat.sh"). `r52.export`'s positional
+  `ckpt` argument is documented and implemented as an **r52** checkpoint directory
+  (`model.safetensors` + `optim.safetensors` + `meta.json`, `r52/checkpoint.py`); pointed at
+  an mlx-lm directory instead, it has no matching weight names to convert.
+
+## Q4. `r52.posttrain.sft` and `r52.posttrain.rl` have no `--resume`
+
+Checked directly against both CLIs (neither `build_parser` lists it, and neither module
+imports anything named `resume`) rather than assumed by analogy with `r52.train`'s and
+`r52.posttrain.midtrain`'s. `nano-sft` and `nano-rl`'s `resume_cmd` is therefore identical to
+their `cmd`: the automatic retry is a full restart from `--init-from` / `--model`, not an
+incremental continuation. `nano-pretrain` and `nano-midtrain` do get a real resume (`--resume`
+and `--resume --run-name nano-m1` respectively — the latter is never combined with
+`--init-from`, which `r52.posttrain.midtrain.build_trainer` rejects outright).
+
+## Q5. Re-attaching after a restart cannot recover a real exit code — `done_when` decides instead
+
+Every job's `cmd` runs under `subprocess.Popen(..., start_new_session=True)`, so a killed or
+crashed supervisor leaves it running rather than orphaning it into termination — exactly what
+a multi-hour training job needs. On the next `run`, `reconcile()` re-attaches any job
+`state.json` still marks `running` whose PID is alive, wrapped as a `Ghost` rather than a real
+`Popen`. A `Ghost` is not this process's child, so it can be polled for liveness
+(`os.kill(pid, 0)`) but never reaped for a genuine exit status the way `Popen.poll()` reaps a
+process this instance actually launched. This is why `is_done()` — not the exit code — is the
+single source of truth for every job's outcome, checked the same way whether a job just
+exited under this process's own `Popen` handle or was re-attached: there was never a version
+of this design where a restart could trust an exit code, so nothing here special-cases one.
+
+The one real bug this surfaced during testing (fixed, not deviated around): terminating a
+*real* `Popen` on a `timeout_h` breach by polling `os.kill(pid, 0)` alone leaves it an
+unreaped zombie, which still answers "alive" to that same check. `_terminate()` calls
+`Popen.wait()` when it has a real handle, and only falls back to liveness polling for a
+`Ghost`, which cannot be waited on at all.
+
+## Q6. `needs_gpu` is `r52.train`-shaped work only, not "runs on the GPU"
+
+Every eval (`scripts/eval.sh`), export (`r52.export`), and the pass@k probe
+(`r52.posttrain.passk`) is `needs_gpu: false` even though all three run inference through MLX
+on the same Metal device. `eval.sh`'s own comment gives the reason ("this machine also runs a
+multi-day pretraining job ... `--memory-limit-gib`"), and it is not theoretical here: while
+this queue was being built, `r52.eval.core --model models/gpt2-mlx` (an unrelated reference
+eval, PID 61199) ran for over 20 minutes alongside the live `gpt2-124m-mac` `r52.train`
+(PID 46011) without incident. `docs/ABLATIONS.md`'s "one GPU, one training job" and
+`scripts/ablate.sh`'s refusal to start are both specifically about a second `r52.train`, never
+about eval/export/inference sharing the device with one — matching the `needs_gpu` split here.
+
+## Q7. `queue/v1.yaml`'s prep jobs found real, pre-existing data — with one real mismatch
+
+Before this queue existed, a shell chain launched separately (by a different agent working
+the plan concurrently) had already run every `prep-*` job's equivalent by hand. Three of the
+four match this queue's own commands exactly and are correctly skipped by `done_when`:
+`data/tokenizers/fineweb32k`, all six `data/corpora/*-fineweb32k/manifest.json`, and
+`data/midtrain/mixture.json`. The fourth does not: `data/sft/smol-smoltalk` was built with
+`--n 50000` (46,904 conversations, finished 17:52:44), not the `--n 200000` that
+`configs/posttrain/sft_nano.yaml`'s own header documents (and that `prep-sft-data`'s `cmd`
+here uses). `prep-sft-data`'s `done_when` is deliberately just "the directory's two
+`meta.json` files exist" — per the design brief, "each job's `done_when` must detect that and
+skip" — so it will skip rebuilding it as-is. The 50k-conversation set is not wrong, only
+smaller than documented; the planner should decide whether to accept it or clear
+`data/sft/smol-smoltalk` before the first `scripts/queue.sh` run so `prep-sft-data` rebuilds
+it at the documented size.

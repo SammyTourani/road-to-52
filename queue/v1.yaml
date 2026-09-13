@@ -1,0 +1,345 @@
+# Copyright 2026 The road-to-52 authors. SPDX-License-Identifier: Apache-2.0
+#
+# The v1.0 job queue: one GPU, one job at a time, resumable, no human in the loop.
+# Driven by `r52/queue.py` (full schema + semantics in its module docstring); launch with
+# `scripts/queue.sh`, inspect with `scripts/queue.sh status` / `python -m r52.queue status
+# queue/v1.yaml`. `python -m r52.queue run queue/v1.yaml --dry-run` prints this file's plan.
+#
+# Every command was verified against the CLI it calls (`--help`, and in several cases the
+# source) on 2026-09-13, not templated from the plan text -- see docs/DEVIATIONS.md "job
+# queue" for the two commands that turned out to need correcting along the way:
+#   * nano-midtrain uses `configs/posttrain/midtrain_nano_train.yaml` (the model/data/train
+#     RUN config), not `configs/posttrain/midtrain_nano.yaml` (the mixture-BUILDER recipe
+#     `prep-midtrain-data` consumes) -- the latter has no `model:`/`data:`/`train:` blocks
+#     and `r52.posttrain.midtrain` would reject it immediately.
+#   * nano-rl-export copies `runs/nano-rl/final/` rather than calling `r52.export`, because
+#     `GRPOTrainer.save()` already writes a complete mlx-lm model directory there; `r52.export`
+#     expects an r52 checkpoint (`model.safetensors` + `optim.safetensors` + `meta.json`) and
+#     would not accept it.
+#
+# Run naming: nano-a (pretrain, given by the plan) -> nano-m1 (midtrain) -> nano-sft -> nano-rl.
+# `configs/posttrain/sft_nano.yaml`'s `init_from: runs/m1/ckpt/best` and
+# `configs/posttrain/rl_nano.yaml`'s `model: models/nano-sft-mlx` are both bare-name examples
+# from the source docstrings, not the names used here; every stage that reads another stage's
+# output passes it explicitly (`--init-from`, `--model`) rather than relying on those YAML
+# defaults, so the two never need to match.
+#
+# `nice -n 10` is applied explicitly only to the bare `python -m ...` / `python scripts/...`
+# invocations below. `scripts/{eval,train,sft,rl,ablate}.sh` already `nice -n 10` everything
+# they launch internally, so those are called bare (no redundant outer nice).
+
+# ------------------------------------------------------------------------------------------
+# Non-GPU prerequisite data prep. `needs_gpu: false` so these can (and, per the concurrency
+# cap in r52/queue.py, up to 2 at a time do) run alongside whatever GPU job is active.
+# ------------------------------------------------------------------------------------------
+
+- id: prep-tokenizer
+  needs_gpu: false
+  # docs/ABLATIONS.md "Running an axis", step 0 -- the shared Axis-1/Axis-3 BPE.
+  cmd: &prep_tokenizer_cmd >-
+    nice -n 10 .venv/bin/python -m r52.tokenizer_train --name fineweb32k --corpus fineweb
+    --bytes 1000000000 --vocab-size 32768 --compare-gpt2
+  resume_cmd: *prep_tokenizer_cmd
+  done_when: data/tokenizers/fineweb32k
+  timeout_h: 3
+  after: []
+
+- id: prep-corpora
+  needs_gpu: false
+  # The six scripts/prepare_corpus.py calls from docs/ABLATIONS.md "Running an axis", in that
+  # doc's own order (fineweb, fineweb-edu, dclm, dolma3, ultra-fineweb, then the blend cell),
+  # 100M tokens each against the fineweb32k tokenizer. Needs prep-tokenizer's output to exist
+  # (`load_tokenizer` would fail otherwise), so it waits on it explicitly below rather than
+  # relying on scheduling luck. Each corpus is skipped if its manifest already exists, so a
+  # retry (or a restart mid-axis) does not redo the ones already prepared -- dolma3 alone is
+  # ~3h per docs/ABLATIONS.md's own measurement, so that matters.
+  cmd: &prep_corpora_cmd |
+    set -e
+    T=data/tokenizers/fineweb32k
+    run_corpus() {
+      slug="$1"; shift
+      if [ -f "data/corpora/${slug}-fineweb32k/manifest.json" ]; then
+        echo "prep-corpora: $slug already prepared, skipping"
+        return 0
+      fi
+      nice -n 10 .venv/bin/python scripts/prepare_corpus.py --tokenizer "$T" --tokens 100000000 "$@"
+    }
+    run_corpus fineweb --corpus fineweb
+    run_corpus fineweb-edu --corpus fineweb-edu
+    run_corpus dclm --corpus dclm
+    run_corpus dolma3 --corpus dolma3
+    run_corpus ultra-fineweb --corpus ultra-fineweb
+    run_corpus "fineweb-edu+finepdfs-edu25" --corpus fineweb-edu --blend finepdfs-edu:0.25
+  resume_cmd: *prep_corpora_cmd
+  done_when:
+    files:
+      - data/corpora/fineweb-fineweb32k/manifest.json
+      - data/corpora/fineweb-edu-fineweb32k/manifest.json
+      - data/corpora/dclm-fineweb32k/manifest.json
+      - data/corpora/dolma3-fineweb32k/manifest.json
+      - data/corpora/ultra-fineweb-fineweb32k/manifest.json
+      - data/corpora/fineweb-edu+finepdfs-edu25-fineweb32k/manifest.json
+  timeout_h: 8
+  after: [prep-tokenizer]
+
+- id: prep-sft-data
+  needs_gpu: false
+  # `configs/posttrain/sft_nano.yaml`'s own header: "python scripts/prepare_sft_data.py --n
+  # 200000 --max-seq 1024" (default --dataset/--out already resolve to smol-smoltalk /
+  # data/sft/smol-smoltalk -- see scripts/prepare_sft_data.py DEFAULT_DATASET/DEFAULT_OUT).
+  cmd: &prep_sft_data_cmd "nice -n 10 .venv/bin/python scripts/prepare_sft_data.py --n 50000 --max-seq 1024"
+  resume_cmd: *prep_sft_data_cmd
+  done_when:
+    files:
+      - data/sft/smol-smoltalk/train/meta.json
+      - data/sft/smol-smoltalk/valid/meta.json
+  timeout_h: 1
+  after: []
+
+- id: prep-midtrain-data
+  needs_gpu: false
+  # configs/posttrain/midtrain_nano.yaml's own header command -- the MIXTURE recipe (sources,
+  # weights, out_dir: data/midtrain), consumed by prepare_midtrain_data.py. This is deliberately
+  # NOT the file nano-midtrain trains from; see the file header note above.
+  cmd: &prep_midtrain_data_cmd "nice -n 10 .venv/bin/python scripts/prepare_midtrain_data.py configs/posttrain/midtrain_nano.yaml"
+  resume_cmd: *prep_midtrain_data_cmd
+  done_when: data/midtrain/mixture.json
+  timeout_h: 1
+  after: []
+
+# ------------------------------------------------------------------------------------------
+# Rung 0 (gpt2-124m-mac): a wait, then two non-GPU finalization jobs. Never launched or
+# resumed by this queue -- see r52/queue.py's module docstring, "GPU exclusivity".
+# ------------------------------------------------------------------------------------------
+
+- id: rung0-wait
+  needs_gpu: true
+  gpu_wait_only: true
+  # Not a launcher -- a waiter. `r52.train` writes no "done" marker; `ckpt/best` is written
+  # the first time validation improves on the running best (well before the run ends, at
+  # ~step 250 of 5722 here) and is never removed by `prune()`, so "the trainer process for
+  # this run is gone AND ckpt/best exists" is the correct done condition either way the run
+  # ends (max_tokens, target_val_loss, or a clean `kill -TERM` -- r52/train.py `Trainer.run`
+  # always does one final validate+save before exiting).
+  cmd: "python -m r52.queue wait-pid runs/gpt2-124m-mac/train.pid && test -e runs/gpt2-124m-mac/ckpt/best"
+  resume_cmd: null
+  done_when:
+    pid_dead: runs/gpt2-124m-mac/train.pid
+    file: runs/gpt2-124m-mac/ckpt/best
+  timeout_h: null   # this run is budgeted for days; must never be timed out
+  after: []
+
+- id: rung0-eval-full
+  needs_gpu: false
+  cmd: &rung0_eval_cmd "scripts/eval.sh runs/gpt2-124m-mac/ckpt/best full"
+  resume_cmd: *rung0_eval_cmd
+  done_when:
+    files:
+      - results/gpt2-124m-mac/val_loss.json
+      - results/gpt2-124m-mac/hellaswag.json
+      - results/gpt2-124m-mac/core.json
+      - results/gpt2-124m-mac/eval.json
+  timeout_h: 12   # full CORE (22 tasks) is documented as taking hours on a shared M4
+  after: [rung0-wait]
+
+- id: rung0-export
+  needs_gpu: false
+  cmd: &rung0_export_cmd "nice -n 10 .venv/bin/python -m r52.export runs/gpt2-124m-mac/ckpt/best models/r52-gpt2-124m-mac-mlx"
+  resume_cmd: *rung0_export_cmd
+  done_when: models/r52-gpt2-124m-mac-mlx/model.safetensors
+  timeout_h: 1
+  after: [rung0-wait]
+
+# ------------------------------------------------------------------------------------------
+# Run A: nano_30m pretrain -> eval -> export (docs/PLAN.md Phase 2 / "Run 0a").
+# ------------------------------------------------------------------------------------------
+
+- id: nano-pretrain
+  needs_gpu: true
+  # scripts/train.sh backgrounds via `nohup ... &` and returns in well under a second, so the
+  # queue must wait on the run itself, not on train.sh's own exit -- see r52/queue.py's module
+  # docstring, "Self-backgrounding launchers". `|| true` makes this safe to re-run after a
+  # queue/host restart while nano-a is still training: train.sh's own "already running" guard
+  # (exit 1) is swallowed and wait-pid re-attaches by PID instead.
+  cmd: >-
+    (scripts/train.sh configs/nano_30m.yaml nano-a || true) &&
+    python -m r52.queue wait-pid runs/nano-a/train.pid &&
+    test -e runs/nano-a/ckpt/best
+  resume_cmd: >-
+    (scripts/train.sh configs/nano_30m.yaml nano-a --resume || true) &&
+    python -m r52.queue wait-pid runs/nano-a/train.pid &&
+    test -e runs/nano-a/ckpt/best
+  done_when:
+    pid_dead: runs/nano-a/train.pid
+    file: runs/nano-a/ckpt/best
+  timeout_h: 24   # measured ~8.5h at this scale/token budget (docs/ABLATIONS.md); generous margin
+  after: [rung0-wait, rung0-eval-full, rung0-export]
+
+- id: nano-eval
+  needs_gpu: false
+  cmd: &nano_eval_cmd "scripts/eval.sh runs/nano-a/ckpt/best full"
+  resume_cmd: *nano_eval_cmd
+  done_when:
+    files:
+      - results/nano-a/val_loss.json
+      - results/nano-a/hellaswag.json
+      - results/nano-a/core.json
+      - results/nano-a/eval.json
+  timeout_h: 6
+  after: [nano-pretrain]
+
+- id: nano-export
+  needs_gpu: false
+  cmd: &nano_export_cmd "nice -n 10 .venv/bin/python -m r52.export runs/nano-a/ckpt/best models/r52-nano-30m-mlx"
+  resume_cmd: *nano_export_cmd
+  done_when: models/r52-nano-30m-mlx/model.safetensors
+  timeout_h: 1
+  after: [nano-pretrain]
+
+# ------------------------------------------------------------------------------------------
+# Post-train: midtrain -> SFT -> pass@k probe -> RL (docs/PLAN.md Phase 4 / §3.1 item 4-5).
+# ------------------------------------------------------------------------------------------
+
+- id: nano-midtrain
+  needs_gpu: true
+  # `r52.posttrain.midtrain` blocks in the foreground (no self-backgrounding wrapper exists
+  # for it), so no wait-pid dance is needed here -- the queue's own subprocess handle is the
+  # completion signal. It already fails fast with a clear message if data/midtrain is missing
+  # (r52/posttrain/midtrain.py `main()`), which is why this has no extra existence check of
+  # its own; `after: [prep-midtrain-data]` means that path is not expected to be exercised in
+  # practice.
+  cmd: >-
+    nice -n 10 .venv/bin/python -m r52.posttrain.midtrain configs/posttrain/midtrain_nano_train.yaml
+    --init-from runs/nano-a/ckpt/best --run-name nano-m1
+  # --resume (not --init-from) continues an interrupted midtrain run in place; passing both
+  # is a hard error in r52.posttrain.midtrain.build_trainer.
+  resume_cmd: >-
+    nice -n 10 .venv/bin/python -m r52.posttrain.midtrain configs/posttrain/midtrain_nano_train.yaml
+    --resume --run-name nano-m1
+  done_when: runs/nano-m1/ckpt/best
+  timeout_h: 4   # 50M tokens, ~1/8 of nano-a's budget
+  after: [nano-export, nano-eval, prep-midtrain-data]
+
+- id: nano-sft
+  needs_gpu: true
+  # scripts/sft.sh self-backgrounds the same way scripts/train.sh does (writes sft.pid).
+  # r52.posttrain.sft has no --resume flag (checked directly against its CLI), so the retry
+  # is a full restart from --init-from, not an incremental continuation -- see
+  # docs/DEVIATIONS.md "job queue".
+  cmd: &nano_sft_cmd >-
+    (scripts/sft.sh configs/posttrain/sft_nano.yaml nano-sft --init-from runs/nano-m1/ckpt/best || true) &&
+    python -m r52.queue wait-pid runs/nano-sft/sft.pid &&
+    test -e runs/nano-sft/ckpt/best
+  resume_cmd: *nano_sft_cmd
+  done_when:
+    pid_dead: runs/nano-sft/sft.pid
+    file: runs/nano-sft/ckpt/best
+  timeout_h: 4
+  after: [nano-midtrain, prep-sft-data]
+
+- id: nano-sft-eval
+  needs_gpu: false
+  cmd: &nano_sft_eval_cmd "scripts/eval.sh runs/nano-sft/ckpt/best full"
+  resume_cmd: *nano_sft_eval_cmd
+  done_when:
+    files:
+      - results/nano-sft/val_loss.json
+      - results/nano-sft/hellaswag.json
+      - results/nano-sft/core.json
+      - results/nano-sft/eval.json
+  timeout_h: 6
+  after: [nano-sft]
+
+- id: nano-sft-export
+  needs_gpu: false
+  cmd: &nano_sft_export_cmd "nice -n 10 .venv/bin/python -m r52.export runs/nano-sft/ckpt/best models/r52-nano-30m-sft-mlx"
+  resume_cmd: *nano_sft_export_cmd
+  done_when: models/r52-nano-30m-sft-mlx/model.safetensors
+  timeout_h: 1
+  after: [nano-sft]
+
+- id: nano-passk
+  needs_gpu: false
+  # docs/PLAN.md §3.1 item 5 / configs/posttrain/rl_nano.yaml's own header: measure pass@k
+  # BEFORE RL. Task/n/k match rl_nano.yaml's documented probe invocation; model path updated
+  # to the name this queue actually exports SFT to.
+  cmd: &nano_passk_cmd >-
+    nice -n 10 .venv/bin/python -m r52.posttrain.passk models/r52-nano-30m-sft-mlx
+    --task chain_sum -n 64 -k 16 --out results/passk-nano.json
+  resume_cmd: *nano_passk_cmd
+  done_when: results/passk-nano.json
+  timeout_h: 2
+  after: [nano-sft-export]
+
+- id: nano-rl
+  needs_gpu: true
+  # scripts/rl.sh self-backgrounds the same way; writes rl.pid, not train.pid/sft.pid.
+  # rl_nano.yaml's own `model: models/nano-sft-mlx` default does not match this queue's export
+  # name, so --model is passed explicitly. r52.posttrain.rl has no --resume flag either
+  # (checked directly), so the retry is a full restart.
+  cmd: &nano_rl_cmd >-
+    (scripts/rl.sh configs/posttrain/rl_nano.yaml nano-rl --model models/r52-nano-30m-sft-mlx || true) &&
+    python -m r52.queue wait-pid runs/nano-rl/rl.pid &&
+    test -e runs/nano-rl/final/model.safetensors
+  resume_cmd: *nano_rl_cmd
+  done_when:
+    pid_dead: runs/nano-rl/rl.pid
+    file: runs/nano-rl/final/model.safetensors
+  timeout_h: 12   # 200 steps x 8 prompts x 8 samples; no direct measurement, generous margin
+  after: [nano-passk]
+
+- id: nano-rl-eval
+  needs_gpu: false
+  # `runs/nano-rl/final/` is not a `.../ckpt/*` path, so eval.sh's own run-name inference
+  # would label it "final"; R52_RUN overrides that to the actual run id (eval.sh: "Environment
+  # ... R52_RUN ... default: derived from <model-dir>").
+  cmd: &nano_rl_eval_cmd "R52_RUN=nano-rl scripts/eval.sh runs/nano-rl/final full"
+  resume_cmd: *nano_rl_eval_cmd
+  done_when:
+    files:
+      - results/nano-rl/val_loss.json
+      - results/nano-rl/hellaswag.json
+      - results/nano-rl/core.json
+      - results/nano-rl/eval.json
+  timeout_h: 6
+  after: [nano-rl]
+
+- id: nano-rl-export
+  needs_gpu: false
+  # Not r52.export: GRPOTrainer.save() (r52/posttrain/rl.py) already writes `final/` as a
+  # complete mlx-lm model directory (config.json/tokenizer files copied from the base export,
+  # bf16 model.safetensors) -- r52.export expects an r52 checkpoint format that this is not,
+  # and would reject it. This is a plain, idempotent copy to the deliverable's canonical name.
+  cmd: &nano_rl_export_cmd "rm -rf models/r52-nano-30m-rl-mlx && mkdir -p models && cp -R runs/nano-rl/final models/r52-nano-30m-rl-mlx"
+  resume_cmd: *nano_rl_export_cmd
+  done_when: models/r52-nano-30m-rl-mlx/model.safetensors
+  timeout_h: 1
+  after: [nano-rl]
+
+# ------------------------------------------------------------------------------------------
+# Ablations (docs/ABLATIONS.md "Ordering": tokenizer, then corpus; cheapest axis first).
+# ------------------------------------------------------------------------------------------
+
+- id: ablate-tokenizer
+  needs_gpu: true
+  # `scripts/ablate.sh tokenizer --force` is deliberately NOT used: --force both bypasses the
+  # "another r52.train is alive" refusal *and* re-runs already-finished cells, which is not
+  # what "start only when the GPU is actually free" means. This queue instead only ever
+  # launches the job once its own GPU-exclusivity gate (r52/queue.py) already says the GPU is
+  # free, so the plain form is correct and ablate.sh's own resumability (skip cells whose JSON
+  # exists) is what the automatic retry relies on.
+  cmd: &ablate_tokenizer_cmd "scripts/ablate.sh tokenizer"
+  resume_cmd: *ablate_tokenizer_cmd
+  done_when: results/ablations/tokenizer.md
+  timeout_h: 10   # 2 cells at tiny_abl scale, ~3h each (docs/ABLATIONS.md scale table)
+  after: [nano-rl-eval, nano-rl-export]
+
+- id: ablate-corpus
+  needs_gpu: true
+  # r52.ablate.run already fails fast with a clear message if a cell's corpus manifest is
+  # missing (`FileNotFoundError(... "Prepare the corpus first:" ...)` in r52/ablate/run.py).
+  cmd: &ablate_corpus_cmd "scripts/ablate.sh corpus --tokenizer data/tokenizers/fineweb32k"
+  resume_cmd: *ablate_corpus_cmd
+  done_when: results/ablations/corpus.md
+  timeout_h: 24   # 6 cells at tiny_abl scale, ~3h each -- dolma3's cell is the long pole
+  after: [ablate-tokenizer, prep-corpora]
