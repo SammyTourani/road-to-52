@@ -1,6 +1,16 @@
 [
   {
     "model": "gpt2-124m",
+    "benchmark": "dclm-core",
+    "value": 0.12164598159769108,
+    "unit": "CORE",
+    "conditions": "examples 91037, few-shot per task (0/3/10), nanochat core.yaml, tokenizer gpt2 (tiktoken), block_size 1024, n_tasks 22, harness r52.eval.core, port of nanochat core_eval.py + base_eval.py",
+    "commit": "05d3fd7+dirty",
+    "command": "python -m r52.eval.core --model models/gpt2-mlx",
+    "date": "2026-09-14"
+  },
+  {
+    "model": "gpt2-124m",
     "benchmark": "fineweb-val-loss",
     "value": 3.4471360768191515,
     "unit": "nats/token",

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-13",
+  "generated": "2026-09-14",
   "target_model": "claude-fable-5-1",
   "meta": {
     "retrieved": "2026-09-13",
@@ -4422,7 +4422,18 @@
             "glm-5-2": null,
             "qwen3-8-max": null,
             "gpt-oss-120b": null,
-            "gpt2-124m": null,
+            "gpt2-124m": {
+              "model": "gpt2-124m",
+              "value": 0.12164598159769108,
+              "unit": "CORE",
+              "source_url": "results/gpt2-124m-reference/eval.json",
+              "retrieved": "2026-09-14",
+              "conditions": "MEASURED BY US. examples 91037, few-shot per task (0/3/10), nanochat core.yaml, tokenizer gpt2 (tiktoken), block_size 1024, n_tasks 22, harness r52.eval.core, port of nanochat core_eval.py + base_eval.py [commit 05d3fd7+dirty; `python -m r52.eval.core --model models/gpt2-mlx`]",
+              "verified": true,
+              "measured_by_us": true,
+              "commit": "05d3fd7+dirty",
+              "command": "python -m r52.eval.core --model models/gpt2-mlx"
+            },
             "gpt2-xl-1558m": {
               "model": "gpt2-xl-1558m",
               "value": 0.256525,
