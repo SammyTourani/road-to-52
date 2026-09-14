@@ -54,6 +54,7 @@ rungs:
       fineweb_val_loss: 3.447
       hellaswag_acc_norm: 0.2938
       hellaswag_acc: 0.2853
+      dclm_core: 0.1216           # measured 2026-09-14 with r52.eval.core (22 tasks, full sets)
       # stretch: the modded-nanogpt speedrun bar (llm.c's FineWeb-trained 124M reproduction)
       fineweb_val_loss_stretch: 3.28
       dclm_core: "GPT-2 small reference, to be measured by us"

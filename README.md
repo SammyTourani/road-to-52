@@ -42,7 +42,7 @@ fp32 is ~30% slower than mixed precision; pure bf16 is ~8% faster than mixed but
 
 | Rung | Hardware | Model | Tokens | Est. cost | Beats | Status |
 |---|---|---|---|---|---|---|
-| **0** | Mac Mini M4, 16 GB | 124M, from scratch | ≤ 0.75B | **$0** (~3 days) | GPT-2 small (2019), measured with our own eval code: FineWeb val loss ≤ 3.447, HellaSwag acc_norm ≥ 29.4% (stretch: the 3.28 speedrun bar) | **running** |
+| **0** | Mac Mini M4, 16 GB | 124M, from scratch | ≤ 0.75B | **$0** (~3 days) | GPT-2 small (2019), measured with our own eval code: FineWeb val loss ≤ 3.447, HellaSwag acc_norm ≥ 29.4%, DCLM CORE ≥ 0.1216 (stretch: the 3.28 speedrun bar) | **running** |
 | 1 | 8×H100, ~2 h | ~1B | ~20B | ~$50–100 | GPT-2 XL (1.6B) on DCLM CORE | planned |
 | 2 | 8×H100, ~5 days | 3B dense / 30B-A3B MoE | 60B | ~$815 | Llama-1 7B (2023) | planned |
 | 3 | 64×H100, ~4 days | 8B dense | 160B | ~$5,800 | Llama 3.1 8B's size at 1/94th its tokens (size match, not a quality claim) | planned |

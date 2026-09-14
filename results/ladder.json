@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-13",
+  "generated": "2026-09-14",
   "method": "FLOPs = 6 * N_active * D; GPU-hours = FLOPs / (peak_TFLOPS * MFU * 3600)",
   "price_meta": {
     "retrieved": "2026-09-13",
@@ -747,8 +747,8 @@
         "fineweb_val_loss": 3.447,
         "hellaswag_acc_norm": 0.2938,
         "hellaswag_acc": 0.2853,
-        "fineweb_val_loss_stretch": 3.28,
-        "dclm_core": "GPT-2 small reference, to be measured by us"
+        "dclm_core": "GPT-2 small reference, to be measured by us",
+        "fineweb_val_loss_stretch": 3.28
       },
       "notes": "docs/ARCHITECTURE.md \u00a710 Run B: 124M params, seq 1024, <=0.75B tokens, target val loss <= 3.28. MFU 0.3052 is exactly the measured training-effective 1.3 TFLOPS divided by the 4.26 TFLOPS theoretical FP32 peak (both measured 2026-09-13, road-to-52 probe; the 1.3 figure was measured at 111M params, not 124M, so treat the wall-clock as +/- one bucket). The resulting ~119 h / ~5.0 days agrees with ARCHITECTURE \u00a710's independent \"4-6 days\" estimate. Cost is the *marginal* cost of hardware we already own -- $0, not \"free\"."
     },
